@@ -81,6 +81,11 @@ pub trait ExchangeHandler: Send + Sync + 'static {
     fn label(&self) -> String {
         self.url().to_string()
     }
+
+    /// Optional HTTP headers for the websocket handshake (e.g., WEEX User-Agent).
+    fn connect_headers(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
 }
 
 // Fixed-size linear-probing map for last seen sequence per stream key.
@@ -217,6 +222,11 @@ fn gate_ping_reply(text: &str) -> Option<String> {
             "{{\"time\":{time},\"channel\":\"futures.pong\",\"event\":\"pong\"}}"
         ));
     }
+    if (text.contains("\"event\":\"ping\"") || text.contains("\"event\": \"ping\""))
+        && !text.contains("\"channel\":\"futures.ping\"")
+    {
+        return Some(r#"{"method":"PONG","id":1}"#.to_string());
+    }
     if text.contains("\"type\":\"ping\"") {
         return Some(r#"{"type":"pong"}"#.to_string());
     }
@@ -304,6 +314,7 @@ fn run_ws_tungstenite<E, const N: usize>(
     E: ExchangeHandler,
 {
     use std::time::{Duration, Instant};
+    use tungstenite::client::IntoClientRequest;
     use tungstenite::{Message, connect};
     let url = handler.url().to_string();
     let label = handler.label();
@@ -311,7 +322,56 @@ fn run_ws_tungstenite<E, const N: usize>(
     let max_backoff = Duration::from_millis(3_000);
     let mut backoff = initial_backoff;
     loop {
-        let (mut socket, _response) = match connect(url::Url::parse(&url).unwrap()) {
+        let parsed_url = match url::Url::parse(&url) {
+            Ok(parsed) => parsed,
+            Err(err) => {
+                eprintln!(
+                    "WS[{label}] invalid url {url}: {err}; reconnecting in {}ms",
+                    backoff.as_millis()
+                );
+                std::thread::sleep(backoff);
+                backoff = std::cmp::min(backoff * 2, max_backoff);
+                continue;
+            }
+        };
+        let mut request = match parsed_url.into_client_request() {
+            Ok(request) => request,
+            Err(err) => {
+                eprintln!(
+                    "WS[{label}] client request build failed: {err}; reconnecting in {}ms",
+                    backoff.as_millis()
+                );
+                std::thread::sleep(backoff);
+                backoff = std::cmp::min(backoff * 2, max_backoff);
+                continue;
+            }
+        };
+        let mut headers_invalid = false;
+        for (k, v) in handler.connect_headers() {
+            let name = match tungstenite::http::HeaderName::from_bytes(k.as_bytes()) {
+                Ok(name) => name,
+                Err(_) => {
+                    eprintln!("WS[{label}] invalid connect header name {k}");
+                    headers_invalid = true;
+                    break;
+                }
+            };
+            let value = match v.parse() {
+                Ok(value) => value,
+                Err(_) => {
+                    eprintln!("WS[{label}] invalid connect header value for {k}: {v}");
+                    headers_invalid = true;
+                    break;
+                }
+            };
+            request.headers_mut().insert(name, value);
+        }
+        if headers_invalid {
+            std::thread::sleep(backoff);
+            backoff = std::cmp::min(backoff * 2, max_backoff);
+            continue;
+        }
+        let (mut socket, _response) = match connect(request) {
             Ok(ok) => ok,
             Err(err) => {
                 eprintln!(
@@ -590,6 +650,7 @@ fn run_ws_fast<E, const N: usize>(
             const SEQ_SLOTS: usize = 256;
             let mut seq_gate: SequenceGate<SEQ_SLOTS> = SequenceGate::new();
 
+            // TODO: apply handler.connect_headers() to the fastwebsockets handshake request.
             let req: Request<()> = url.clone().into_client_request().unwrap();
             let uri = req.uri().clone();
             let host = uri.host().unwrap().to_string();

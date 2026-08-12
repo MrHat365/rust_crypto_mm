@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+pub mod digifinex_client;
+pub mod digifinex_gateway;
 pub mod dry_run;
 pub mod gate_client;
 pub mod gate_ws;
@@ -9,6 +11,8 @@ pub mod lighter_gateway;
 pub mod order_manager;
 pub mod types;
 
+pub use digifinex_client::{DigiFinexClient, DigiFinexCredentials};
+pub use digifinex_gateway::DigiFinexGateway;
 pub use dry_run::DryRunGateway;
 pub use gate_client::{GateClient, GateCredentials};
 pub use gate_ws::{GateWsConfig, GateWsGateway};

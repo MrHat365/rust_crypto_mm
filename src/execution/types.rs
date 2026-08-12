@@ -9,6 +9,7 @@ use crate::base_classes::types::Side;
 pub enum Venue {
     Gate,
     Lighter,
+    Digifinex,
 }
 
 impl Venue {
@@ -17,6 +18,7 @@ impl Venue {
         match self {
             Venue::Gate => "gate",
             Venue::Lighter => "lighter",
+            Venue::Digifinex => "digifinex",
         }
     }
 }

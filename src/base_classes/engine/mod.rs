@@ -5,11 +5,13 @@ mod bitget;
 mod bybit;
 mod config;
 mod demean_controller;
+mod digifinex;
 mod gate;
 mod helpers;
 mod lighter;
 mod mexc;
 mod okx;
+mod weex;
 
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -29,12 +31,20 @@ use crate::base_classes::ws::{FeedSignal, spawn_ws_worker};
 use crate::exchanges::binance::BinanceHandler;
 use crate::exchanges::bitget::BitgetHandler;
 use crate::exchanges::bybit::BybitHandler;
+use crate::exchanges::digifinex::{
+    DigiFinexHandler, DigiFinexInstrumentMeta, fetch_instrument_meta as fetch_digifinex_instrument_meta,
+    parser::normalize_instrument_id as normalize_digifinex_instrument_id,
+};
 use crate::exchanges::gate::{GateHandler, canonical_contract_symbol};
 use crate::exchanges::lighter::{LighterHandler, LighterMarketMeta, fetch_market_meta_async};
 use crate::exchanges::mexc::{
     MexcContractMeta, MexcHandler, fetch_contract_meta as fetch_mexc_contract_meta,
 };
 use crate::exchanges::okx::{OkxHandler, OkxInstrumentMeta, fetch_instrument_meta};
+use crate::exchanges::weex::{
+    WeexContractMeta, WeexHandler, fetch_contract_meta as fetch_weex_contract_meta,
+    rest::normalize_symbol as normalize_weex_symbol,
+};
 use crate::pricing::PricingModelConfig;
 
 #[cfg(feature = "gate_exec")]
@@ -252,6 +262,8 @@ pub fn spawn_state_engine(
         let okx_auto = feeds.okx.is_auto();
         let mexc_auto = feeds.mexc.is_auto();
         let lighter_auto = feeds.lighter.is_auto();
+        let digifinex_auto = feeds.digifinex.is_auto();
+        let weex_auto = feeds.weex.is_auto();
 
         let symbol_uc = symbol.to_uppercase();
         let cross_venue_symbol = symbol_uc.replace('_', "");
@@ -260,6 +272,8 @@ pub fn spawn_state_engine(
         let bitget_symbol = cross_venue_symbol.clone();
         let okx_inst_id = format_okx_inst_id(&symbol);
         let mexc_symbol = symbol_uc.replace('/', "_");
+        let digifinex_instrument_id = normalize_digifinex_instrument_id(&symbol);
+        let weex_symbol = normalize_weex_symbol(&symbol);
         let gate_contract = canonical_contract_symbol(&symbol);
         let gate_symbol = gate_contract.clone();
         let lighter_symbol = crate::exchanges::lighter::rest::normalize_symbol(&symbol);
@@ -271,6 +285,8 @@ pub fn spawn_state_engine(
             okx_meta_result,
             mexc_meta_result,
             lighter_meta,
+            digifinex_meta_result,
+            weex_meta_result,
         ): (
             Option<crate::exchanges::gate::GateContractMeta>,
             bool,
@@ -278,6 +294,8 @@ pub fn spawn_state_engine(
             Result<Option<OkxInstrumentMeta>, reqwest::Error>,
             Result<Option<MexcContractMeta>, reqwest::Error>,
             Option<LighterMarketMeta>,
+            Result<Option<DigiFinexInstrumentMeta>, reqwest::Error>,
+            Result<Option<WeexContractMeta>, reqwest::Error>,
         ) = rt.block_on(async {
             let gate_meta = crate::exchanges::gate::fetch_contract_meta_async(&gate_contract);
             let bybit_fut = async {
@@ -315,13 +333,29 @@ pub fn spawn_state_engine(
                     None
                 }
             };
+            let digifinex_fut = async {
+                if feeds.digifinex.initial_enabled() || digifinex_auto {
+                    fetch_digifinex_instrument_meta(&symbol).await
+                } else {
+                    Ok(None)
+                }
+            };
+            let weex_fut = async {
+                if feeds.weex.initial_enabled() || weex_auto {
+                    fetch_weex_contract_meta(&weex_symbol).await
+                } else {
+                    Ok(None)
+                }
+            };
             tokio::join!(
                 gate_meta,
                 bybit_fut,
                 bitget_fut,
                 okx_fut,
                 mexc_fut,
-                lighter_fut
+                lighter_fut,
+                digifinex_fut,
+                weex_fut
             )
         });
 
@@ -429,6 +463,82 @@ pub fn spawn_state_engine(
             false
         };
 
+        let (digifinex_supported, digifinex_meta) = if digifinex_auto {
+            match digifinex_meta_result {
+                Ok(Some(meta)) => (true, Some(meta)),
+                Ok(None) => {
+                    eprintln!(
+                        "DigiFinex instrument {} not found; disabling DigiFinex feeds (auto mode)",
+                        digifinex_instrument_id
+                    );
+                    (false, None)
+                }
+                Err(err) => {
+                    eprintln!(
+                        "DigiFinex instrument lookup failed for {}: {}; keeping DigiFinex enabled with default sizing",
+                        digifinex_instrument_id, err
+                    );
+                    (true, None)
+                }
+            }
+        } else if feeds.digifinex.initial_enabled() {
+            match digifinex_meta_result {
+                Ok(Some(meta)) => (true, Some(meta)),
+                Ok(None) => {
+                    panic!(
+                        "ERROR: DigiFinex instrument {} not found but DigiFinex feed is forced On",
+                        digifinex_instrument_id
+                    );
+                }
+                Err(err) => {
+                    panic!(
+                        "ERROR: DigiFinex instrument lookup failed for {}: {}",
+                        digifinex_instrument_id, err
+                    );
+                }
+            }
+        } else {
+            (false, None)
+        };
+
+        let (weex_supported, weex_meta) = if weex_auto {
+            match weex_meta_result {
+                Ok(Some(meta)) => (true, Some(meta)),
+                Ok(None) => {
+                    eprintln!(
+                        "WEEX contract {} not found; disabling WEEX feeds (auto mode)",
+                        weex_symbol
+                    );
+                    (false, None)
+                }
+                Err(err) => {
+                    eprintln!(
+                        "WEEX contract lookup failed for {}: {}; keeping WEEX enabled with default sizing",
+                        weex_symbol, err
+                    );
+                    (true, None)
+                }
+            }
+        } else if feeds.weex.initial_enabled() {
+            match weex_meta_result {
+                Ok(Some(meta)) => (true, Some(meta)),
+                Ok(None) => {
+                    panic!(
+                        "ERROR: WEEX contract {} not found but WEEX feed is forced On",
+                        weex_symbol
+                    );
+                }
+                Err(err) => {
+                    panic!(
+                        "ERROR: WEEX contract lookup failed for {}: {}",
+                        weex_symbol, err
+                    );
+                }
+            }
+        } else {
+            (false, None)
+        };
+
         let mut bybit_c = if feeds.bybit.initial_enabled() && bybit_supported {
             let (consumer, _jh) = spawn_ws_worker::<BybitHandler, N>(
                 BybitHandler::new(symbol.clone()),
@@ -503,6 +613,26 @@ pub fn spawn_state_engine(
         } else {
             None
         };
+        let mut digifinex_c = if feeds.digifinex.initial_enabled() && digifinex_supported {
+            let (consumer, _jh) = spawn_ws_worker::<DigiFinexHandler, N>(
+                DigiFinexHandler::new(symbol.clone()),
+                None,
+                Some(wake_signal.clone()),
+            );
+            Some(consumer)
+        } else {
+            None
+        };
+        let mut weex_c = if feeds.weex.initial_enabled() && weex_supported {
+            let (consumer, _jh) = spawn_ws_worker::<WeexHandler, N>(
+                WeexHandler::new(symbol.clone()),
+                None,
+                Some(wake_signal.clone()),
+            );
+            Some(consumer)
+        } else {
+            None
+        };
         #[cfg(feature = "gate_exec")]
         {
             if gate_c.is_some() {
@@ -561,6 +691,16 @@ pub fn spawn_state_engine(
         let mut lighter_engine = lighter_c.take().map(|(consumer, meta)| {
             lighter::LighterEngine::new(lighter_symbol.clone(), meta, consumer)
         });
+        let mut digifinex_engine = digifinex_c.take().map(|consumer| {
+            digifinex::DigiFinexEngine::new(
+                digifinex_instrument_id.clone(),
+                consumer,
+                digifinex_meta.clone(),
+            )
+        });
+        let mut weex_engine = weex_c.take().map(|consumer| {
+            weex::WeexEngine::new(weex_symbol.clone(), consumer, weex_meta.clone())
+        });
 
         loop {
             let mut progressed = false;
@@ -587,6 +727,12 @@ pub fn spawn_state_engine(
             if let Some(engine) = lighter_engine.as_mut() {
                 progressed |=
                     engine.process(&mut feed_gate, &mut publisher, &mut demean, &fast_sender);
+            }
+            if let Some(engine) = digifinex_engine.as_mut() {
+                progressed |= engine.process(&mut feed_gate, &mut publisher, &mut demean);
+            }
+            if let Some(engine) = weex_engine.as_mut() {
+                progressed |= engine.process(&mut feed_gate, &mut publisher, &mut demean);
             }
 
             if progressed {

@@ -1,6 +1,6 @@
 # Exchange Integration Guide
 
-This guide explains how to add a new exchange (perp futures) to the engine using the current code layout. Follow this as a checklist; existing venues (Gate, Bybit, Binance, Bitget, OKX) are good reference implementations.
+This guide explains how to add a new exchange (perp futures) to the engine using the current code layout. Follow this as a checklist; existing venues (Gate, Bybit, Binance, Bitget, OKX, MEXC, Lighter, DigiFinex, WEEX) are good reference implementations.
 
 ---
 

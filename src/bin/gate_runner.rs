@@ -20,22 +20,22 @@ use rust_test::base_classes::reference::ReferenceEvent;
 use rust_test::base_classes::state::state;
 use rust_test::base_classes::types::Side;
 use rust_test::config::runner::{
-    RiskConfig, RunnerConfig, load_gate_credentials, load_lighter_credentials, load_runner_config,
-    log_runner_config,
+    RiskConfig, RunnerConfig, load_digifinex_credentials, load_gate_credentials,
+    load_lighter_credentials, load_runner_config, log_runner_config,
 };
 use rust_test::exchanges::gate::rest;
 use rust_test::exchanges::lighter::rest as lighter_rest;
 use rust_test::execution::{
-    ClientOrderId, DryRunGateway, ExecutionGateway, ExecutionReport, GateClient, GateCredentials,
-    GateWsConfig, GateWsGateway, InventoryReportOutcome, InventoryTracker, LighterAuthClient,
-    LighterCredentials, LighterGateway, LighterGatewayConfig, LighterInstrument, OrderAck,
-    OrderManager, OrderStatus, QuoteIntent, Venue, is_lighter_sendtx_quota_error,
-    resolve_lighter_signer_path,
+    ClientOrderId, DigiFinexClient, DigiFinexCredentials, DigiFinexGateway, DryRunGateway,
+    ExecutionGateway, ExecutionReport, GateClient, GateCredentials, GateWsConfig, GateWsGateway,
+    InventoryReportOutcome, InventoryTracker, LighterAuthClient, LighterCredentials, LighterGateway,
+    LighterGatewayConfig, LighterInstrument, OrderAck, OrderManager, OrderStatus, QuoteIntent,
+    Venue, is_lighter_sendtx_quota_error, resolve_lighter_signer_path,
 };
 use rust_test::logging::quote::{DebugLogger, QuoteLogHandle, format_f64};
 use rust_test::strategy::{
-    MomentumFadeStrategy, ReferenceMeta, SimpleQuoteStrategy, SizeSpec, StrategyEngine,
-    StrategyKind,
+    AsToxicityStrategy, LeadLagStrategy, MomentumFadeStrategy, ReferenceMeta, SimpleQuoteStrategy,
+    SizeSpec, StrategyEngine, StrategyKind,
 };
 use rust_test::utils::parsing::log_parse_drop;
 use serde_json::{Value, json};
@@ -75,6 +75,7 @@ fn venue_markout_mid_price(venue: Venue) -> Option<f64> {
     let snap = match venue {
         Venue::Gate => &guard.gate.orderbook,
         Venue::Lighter => &guard.lighter.orderbook,
+        Venue::Digifinex => &guard.digifinex.orderbook,
     };
     let last_recv = snap.received_at?;
     if last_recv.elapsed() > MARKOUT_MAX_AGE {
@@ -913,6 +914,30 @@ async fn main() -> Result<()> {
             // Smallest lot size unit is determined by size_decimals.
             10f64.powi(-(meta.size_decimals as i32))
         }
+        Venue::Digifinex => {
+            let instrument_id =
+                rust_test::exchanges::digifinex::normalize_instrument_id(&config.strategy.symbol);
+            let meta = rust_test::exchanges::digifinex::fetch_instrument_meta(&instrument_id)
+                .await
+                .map_err(|err| anyhow!("DigiFinex instrument meta request failed: {err}"))?
+                .ok_or_else(|| {
+                    anyhow!(
+                        "failed to fetch DigiFinex instrument metadata for {}",
+                        instrument_id
+                    )
+                })?;
+            let size = meta
+                .qty_multiplier()
+                .filter(|m| m.is_finite() && *m > 0.0)
+                .unwrap_or(1.0);
+            debug.info(|| {
+                format!(
+                    "resolved DigiFinex instrument {} contract_value={:?} qty_multiplier={}",
+                    meta.instrument_id, meta.contract_value, size
+                )
+            });
+            size
+        }
     };
 
     let config = Arc::new(config);
@@ -935,6 +960,7 @@ async fn main() -> Result<()> {
     enum LiveCreds {
         Gate(GateCredentials),
         Lighter(LighterCredentials),
+        Digifinex(DigiFinexCredentials),
     }
 
     let credentials = if config.mode.dry_run {
@@ -943,6 +969,9 @@ async fn main() -> Result<()> {
         match venue {
             Venue::Gate => Some(LiveCreds::Gate(load_gate_credentials(config.as_ref())?)),
             Venue::Lighter => Some(LiveCreds::Lighter(load_lighter_credentials(
+                config.as_ref(),
+            )?)),
+            Venue::Digifinex => Some(LiveCreds::Digifinex(load_digifinex_credentials(
                 config.as_ref(),
             )?)),
         }
@@ -1091,6 +1120,10 @@ async fn main() -> Result<()> {
                 let resolved = lighter_creds.as_ref().unwrap_or(creds);
                 Arc::new(setup_lighter_gateway(config.as_ref(), resolved, meta).await?)
             }
+            (Venue::Digifinex, LiveCreds::Digifinex(creds), _) => {
+                let client = DigiFinexClient::new(creds.clone())?;
+                Arc::new(DigiFinexGateway::new(client, &config.strategy.symbol))
+            }
             _ => bail!("credential/venue mismatch"),
         }
     };
@@ -1109,6 +1142,27 @@ async fn main() -> Result<()> {
                 .expect("momentum_fade config missing");
             StrategyEngine::Momentum(MomentumFadeStrategy::new(
                 momentum,
+                config.strategy.venue,
+                config.strategy.symbol.clone(),
+                config.strategy.min_tick,
+                base_size,
+            ))
+        }
+        StrategyKind::AsToxicity => {
+            let as_cfg = config
+                .as_toxicity
+                .clone()
+                .unwrap_or_default();
+            StrategyEngine::AsToxicity(AsToxicityStrategy::new(
+                config.strategy.clone(),
+                as_cfg,
+                base_size,
+            ))
+        }
+        StrategyKind::LeadLag => {
+            let ll = config.lead_lag.clone().expect("lead_lag config missing");
+            StrategyEngine::LeadLag(LeadLagStrategy::new(
+                ll,
                 config.strategy.venue,
                 config.strategy.symbol.clone(),
                 config.strategy.min_tick,
@@ -1220,7 +1274,12 @@ async fn main() -> Result<()> {
             .as_ref()
             .map(|cfg| cfg.min_interval_ms)
             .unwrap_or(config.strategy.quote_interval_ms),
-        StrategyKind::SimpleQuote => config.strategy.quote_interval_ms,
+        StrategyKind::LeadLag => config
+            .lead_lag
+            .as_ref()
+            .map(|cfg| cfg.cooldown_ms)
+            .unwrap_or(config.strategy.quote_interval_ms),
+        StrategyKind::SimpleQuote | StrategyKind::AsToxicity => config.strategy.quote_interval_ms,
     };
     let mut quote_timer = interval(Duration::from_millis(quote_interval_ms.max(1)));
     // Skip missed ticks so quoting never starves the cancel hot path
@@ -1604,7 +1663,14 @@ async fn handle_quote_tick(
                 .as_ref()
                 .map(|cfg| cfg.min_interval_ms)
                 .unwrap_or(config_ref.strategy.quote_interval_ms),
-            StrategyKind::SimpleQuote => config_ref.strategy.quote_interval_ms,
+            StrategyKind::LeadLag => config_ref
+                .lead_lag
+                .as_ref()
+                .map(|cfg| cfg.cooldown_ms)
+                .unwrap_or(config_ref.strategy.quote_interval_ms),
+            StrategyKind::SimpleQuote | StrategyKind::AsToxicity => {
+                config_ref.strategy.quote_interval_ms
+            }
         };
         let debounce_budget = Duration::from_millis(debounce_budget_ms.max(1));
         let (reference_instant, timer_wait) = if let Some(meta) = ref_meta.as_ref() {

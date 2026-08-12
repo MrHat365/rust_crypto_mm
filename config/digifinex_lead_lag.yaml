@@ -1,0 +1,58 @@
+strategy_kind: lead_lag
+
+strategy:
+  venue: digifinex
+  symbol: BTC_USDT
+  size: 1
+  quote_interval_ms: 50
+  min_tick: 0.1
+  min_half_spread_bps: 1.0
+  volatility_ewma_alpha: 0.2
+  volatility_multiplier: 1.0
+  fee_bps: 2.0
+  venue_buffer_bps: 1.0
+  reprice_fraction: 1.0
+  max_age_ms: 2000
+  cross_guard_ticks: 0
+  cancellation_delay_ms: 0
+
+lead_lag:
+  min_entry_spread_bps: 8.0
+  exit_spread_bps: 1.0
+  max_position_age_ms: 5000
+  max_quote_skew_ms: 1000
+  max_quote_age_ms: 2000
+  cooldown_ms: 250
+  leader_feed: binance
+  lagger_feed: digifinex
+
+feeds:
+  gate: false
+  binance: true
+  bybit: false
+  bitget: false
+  okx: false
+  mexc: false
+  lighter: false
+  digifinex: true
+  weex: false
+
+risk:
+  max_order_notional: 200.0
+  max_position_notional: 400.0
+
+mode:
+  dry_run: true
+  log_fills: true
+  debug_prints: true
+  markout_prints: false
+  demean_prices: false
+
+logging:
+  enabled: true
+  path: logs/digifinex_lead_lag.csv
+  flush_interval_ms: 200
+
+credentials:
+  api_key_env: DIGIFINEX_API_KEY
+  api_secret_env: DIGIFINEX_API_SECRET

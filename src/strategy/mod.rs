@@ -7,9 +7,13 @@ use serde::Deserialize;
 use crate::base_classes::reference::ReferenceEvent;
 use crate::execution::{ClientOrderId, ExecutionReport};
 
+pub mod as_toxicity;
+pub mod lead_lag;
 pub mod momentum_fade;
 pub mod simple_quote;
 
+pub use as_toxicity::{AsToxicityConfig, AsToxicityStrategy};
+pub use lead_lag::{LeadLagConfig, LeadLagStrategy};
 pub use momentum_fade::{EntryPriceSource, MomentumFadeConfig, MomentumFadeStrategy};
 pub use simple_quote::{
     QuoteConfig, QuotePlan, QuoteStateMetrics, ReferenceMeta, SimpleQuoteStrategy, SizeSpec,
@@ -20,6 +24,8 @@ pub use simple_quote::{
 pub enum StrategyKind {
     SimpleQuote,
     MomentumFade,
+    AsToxicity,
+    LeadLag,
 }
 
 impl Default for StrategyKind {
@@ -33,6 +39,8 @@ impl StrategyKind {
         match self {
             StrategyKind::SimpleQuote => "simple_quote",
             StrategyKind::MomentumFade => "momentum_fade",
+            StrategyKind::AsToxicity => "as_toxicity",
+            StrategyKind::LeadLag => "lead_lag",
         }
     }
 }
@@ -50,6 +58,8 @@ pub struct FillContext {
 pub enum StrategyEngine {
     Simple(SimpleQuoteStrategy),
     Momentum(MomentumFadeStrategy),
+    AsToxicity(AsToxicityStrategy),
+    LeadLag(LeadLagStrategy),
 }
 
 impl StrategyEngine {
@@ -63,6 +73,8 @@ impl StrategyEngine {
                 }
             }
             StrategyEngine::Momentum(strategy) => strategy.on_market_update(reference),
+            StrategyEngine::AsToxicity(strategy) => strategy.on_market_update(reference),
+            StrategyEngine::LeadLag(strategy) => strategy.on_market_update(reference),
         }
     }
 
@@ -70,6 +82,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.plan_quotes(now),
             StrategyEngine::Momentum(strategy) => strategy.plan_quotes(now),
+            StrategyEngine::AsToxicity(strategy) => strategy.plan_quotes(now),
+            StrategyEngine::LeadLag(strategy) => strategy.plan_quotes(now),
         }
     }
 
@@ -77,6 +91,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.commit_plan(plan),
             StrategyEngine::Momentum(strategy) => strategy.commit_plan(plan),
+            StrategyEngine::AsToxicity(strategy) => strategy.commit_plan(plan),
+            StrategyEngine::LeadLag(strategy) => strategy.commit_plan(plan),
         }
     }
 
@@ -84,6 +100,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.rollback_plan(plan),
             StrategyEngine::Momentum(strategy) => strategy.rollback_plan(plan),
+            StrategyEngine::AsToxicity(strategy) => strategy.rollback_plan(plan),
+            StrategyEngine::LeadLag(strategy) => strategy.rollback_plan(plan),
         }
     }
 
@@ -91,6 +109,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.state_metrics(),
             StrategyEngine::Momentum(strategy) => strategy.state_metrics(),
+            StrategyEngine::AsToxicity(strategy) => strategy.state_metrics(),
+            StrategyEngine::LeadLag(strategy) => strategy.state_metrics(),
         }
     }
 
@@ -98,6 +118,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.handle_report(report),
             StrategyEngine::Momentum(strategy) => strategy.handle_report(report),
+            StrategyEngine::AsToxicity(strategy) => strategy.handle_report(report),
+            StrategyEngine::LeadLag(strategy) => strategy.handle_report(report),
         }
     }
 
@@ -105,6 +127,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.latest_price(),
             StrategyEngine::Momentum(strategy) => strategy.latest_price(),
+            StrategyEngine::AsToxicity(strategy) => strategy.latest_price(),
+            StrategyEngine::LeadLag(strategy) => strategy.latest_price(),
         }
     }
 
@@ -112,6 +136,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.fill_context(order_id, now),
             StrategyEngine::Momentum(strategy) => strategy.fill_context(order_id, now),
+            StrategyEngine::AsToxicity(strategy) => strategy.fill_context(order_id, now),
+            StrategyEngine::LeadLag(strategy) => strategy.fill_context(order_id, now),
         }
     }
 
@@ -119,6 +145,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.idle_reason(),
             StrategyEngine::Momentum(strategy) => strategy.idle_reason(),
+            StrategyEngine::AsToxicity(strategy) => strategy.idle_reason(),
+            StrategyEngine::LeadLag(strategy) => strategy.idle_reason(),
         }
     }
 }

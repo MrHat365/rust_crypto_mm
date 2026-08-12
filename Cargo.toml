@@ -132,6 +132,9 @@ optional = true
 [dependencies.parking_lot]
 version = "0.12"
 
+[dependencies.flate2]
+version = "1"
+
 [[bin]]
 name = "gate_cancel_text"
 path = "src/bin/gate_cancel_text.rs"

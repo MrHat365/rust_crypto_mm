@@ -24,6 +24,16 @@ exchanges/
 ├── bitget/        # Bitget (market data only)
 │   ├── parser.rs
 │   └── orderbook.rs
+├── digifinex/     # DigiFinex (market data + REST execution)
+│   ├── parser.rs
+│   ├── orderbook.rs
+│   ├── rest.rs
+│   └── signing.rs
+├── weex/          # WEEX (market data only)
+│   ├── parser.rs
+│   ├── orderbook.rs
+│   └── rest.rs
+├── okx/ mexc/ lighter/ ...
 └── endpoints.rs   # Shared endpoint constants
 ```
 

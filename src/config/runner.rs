@@ -7,9 +7,11 @@ use serde::Deserialize;
 
 use crate::base_classes::feed_config::FeedToggles;
 use crate::execution::types::Venue;
-use crate::execution::{GateCredentials, LighterCredentials};
+use crate::execution::{DigiFinexCredentials, GateCredentials, LighterCredentials};
 use crate::pricing::PricingModelConfig;
-use crate::strategy::{MomentumFadeConfig, QuoteConfig, StrategyKind};
+use crate::strategy::{
+    AsToxicityConfig, LeadLagConfig, MomentumFadeConfig, QuoteConfig, StrategyKind,
+};
 
 fn default_true() -> bool {
     true
@@ -106,6 +108,10 @@ pub struct RunnerConfig {
     pub strategy: QuoteConfig,
     #[serde(default)]
     pub momentum_fade: Option<MomentumFadeConfig>,
+    #[serde(default)]
+    pub as_toxicity: Option<AsToxicityConfig>,
+    #[serde(default)]
+    pub lead_lag: Option<LeadLagConfig>,
     pub risk: RiskConfig,
     pub mode: ModeConfig,
     #[serde(default)]
@@ -127,6 +133,43 @@ pub fn load_runner_config(path: &str) -> Result<RunnerConfig> {
         .with_context(|| format!("failed to parse config at {}", path))?;
     validate_runner_config(&config)?;
     Ok(config)
+}
+
+pub fn load_digifinex_credentials(config: &RunnerConfig) -> Result<DigiFinexCredentials> {
+    let creds = config.credentials.clone().unwrap_or_default();
+    let key_env = creds
+        .api_key_env
+        .unwrap_or_else(|| "DIGIFINEX_API_KEY".to_string());
+    let secret_env = creds
+        .api_secret_env
+        .unwrap_or_else(|| "DIGIFINEX_API_SECRET".to_string());
+
+    let (api_key, api_key_source) = match creds.api_key.clone() {
+        Some(v) => (v, "config.api_key".to_string()),
+        None => (
+            std::env::var(&key_env).with_context(|| format!("missing env var {key_env}"))?,
+            format!("env:{key_env}"),
+        ),
+    };
+    let (api_secret, api_secret_source) = match creds.api_secret.clone() {
+        Some(v) => (v, "config.api_secret".to_string()),
+        None => (
+            std::env::var(&secret_env).with_context(|| format!("missing env var {secret_env}"))?,
+            format!("env:{secret_env}"),
+        ),
+    };
+    let mut resolved = DigiFinexCredentials::new(api_key, api_secret);
+    if let Some(base_url) = creds.base_url.clone() {
+        if Url::parse(&base_url).is_err() {
+            bail!("invalid DigiFinex credentials.base_url {base_url}");
+        }
+        resolved.base_url = base_url;
+    }
+    eprintln!(
+        "Resolved DigiFinex credentials: api_key_source={}, api_secret_source={}, base_url={}",
+        api_key_source, api_secret_source, resolved.base_url
+    );
+    Ok(resolved)
 }
 
 pub fn load_gate_credentials(config: &RunnerConfig) -> Result<GateCredentials> {
@@ -269,6 +312,67 @@ pub fn validate_runner_config(config: &RunnerConfig) -> Result<()> {
         StrategyKind::SimpleQuote => {
             if config.momentum_fade.is_some() {
                 bail!("momentum_fade config present but strategy_kind is simple_quote");
+            }
+            if config.as_toxicity.is_some() {
+                bail!("as_toxicity config present but strategy_kind is simple_quote");
+            }
+            if config.lead_lag.is_some() {
+                bail!("lead_lag config present but strategy_kind is simple_quote");
+            }
+        }
+        StrategyKind::AsToxicity => {
+            let Some(as_cfg) = config.as_toxicity.as_ref() else {
+                bail!("strategy_kind=as_toxicity requires as_toxicity config");
+            };
+            if !as_cfg.gamma.is_finite() || as_cfg.gamma < 0.0 {
+                bail!("as_toxicity.gamma must be finite and >= 0");
+            }
+            if !as_cfg.k.is_finite() || as_cfg.k <= 0.0 {
+                bail!("as_toxicity.k must be finite and > 0");
+            }
+            if !as_cfg.tau_secs.is_finite() || as_cfg.tau_secs <= 0.0 {
+                bail!("as_toxicity.tau_secs must be finite and > 0");
+            }
+            if !as_cfg.inventory_limit.is_finite() || as_cfg.inventory_limit <= 0.0 {
+                bail!("as_toxicity.inventory_limit must be finite and > 0");
+            }
+            if as_cfg.toxicity_window == 0 {
+                bail!("as_toxicity.toxicity_window must be > 0");
+            }
+            if !as_cfg.microprice_blend.is_finite()
+                || as_cfg.microprice_blend < 0.0
+                || as_cfg.microprice_blend > 1.0
+            {
+                bail!("as_toxicity.microprice_blend must be in [0, 1]");
+            }
+        }
+        StrategyKind::LeadLag => {
+            let Some(ll) = config.lead_lag.as_ref() else {
+                bail!("strategy_kind=lead_lag requires lead_lag config");
+            };
+            if config.strategy.venue != Venue::Digifinex {
+                bail!("lead_lag strategy requires venue=digifinex (execution on lagger)");
+            }
+            if !config.feeds.binance.initial_enabled() {
+                bail!("lead_lag strategy requires feeds.binance enabled");
+            }
+            if !config.feeds.digifinex.initial_enabled() {
+                bail!("lead_lag strategy requires feeds.digifinex enabled");
+            }
+            if !ll.min_entry_spread_bps.is_finite() || ll.min_entry_spread_bps <= 0.0 {
+                bail!("lead_lag.min_entry_spread_bps must be finite and > 0");
+            }
+            if !ll.exit_spread_bps.is_finite() || ll.exit_spread_bps < 0.0 {
+                bail!("lead_lag.exit_spread_bps must be finite and >= 0");
+            }
+            if ll.max_position_age_ms == 0 {
+                bail!("lead_lag.max_position_age_ms must be > 0");
+            }
+            if ll.max_quote_age_ms == 0 {
+                bail!("lead_lag.max_quote_age_ms must be > 0");
+            }
+            if ll.leader_feed.trim().is_empty() || ll.lagger_feed.trim().is_empty() {
+                bail!("lead_lag.leader_feed/lagger_feed must be non-empty");
             }
         }
         StrategyKind::MomentumFade => {

@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::base_classes::reference::ReferenceEvent;
+use crate::base_classes::reference::{ReferenceEvent, ReferenceSource};
 use crate::base_classes::state::{ExchangeAdjustment, GlobalState, TradeDirection, state};
 use crate::pricing::{LighterPricingModel, PricingModelConfig, PricingObservation};
 
@@ -466,6 +466,88 @@ impl ReferencePublisher {
             "mexc",
             "trade",
             st.mexc.trade.received_at,
+        );
+
+        // DigiFinex sources (adjusted)
+        consider(
+            Self::adjust_price(st.digifinex.bbo.price, &st.demean.digifinex),
+            Self::adjust_price(
+                st.digifinex.bbo.bid_levels[0].map(|lvl| lvl.0),
+                &st.demean.digifinex,
+            ),
+            Self::adjust_price(
+                st.digifinex.bbo.ask_levels[0].map(|lvl| lvl.0),
+                &st.demean.digifinex,
+            ),
+            Self::adjust_levels(st.digifinex.bbo.bid_levels, &st.demean.digifinex),
+            Self::adjust_levels(st.digifinex.bbo.ask_levels, &st.demean.digifinex),
+            st.digifinex.bbo.direction,
+            st.digifinex.bbo.size,
+            st.digifinex.bbo.seq,
+            st.digifinex.bbo.ts_ns,
+            st.digifinex.bbo.source_engine_ts_ns,
+            st.digifinex.bbo.source_system_ts_ns,
+            ReferenceSource::DigifinexBbo.idx(),
+            Self::label("digifinex_bbo", &st.demean.digifinex),
+            "digifinex",
+            "bbo",
+            st.digifinex.bbo.received_at,
+        );
+        consider(
+            Self::adjust_price(st.digifinex.trade.price, &st.demean.digifinex),
+            None,
+            None,
+            Self::adjust_levels(st.digifinex.trade.bid_levels, &st.demean.digifinex),
+            Self::adjust_levels(st.digifinex.trade.ask_levels, &st.demean.digifinex),
+            st.digifinex.trade.direction,
+            st.digifinex.trade.size,
+            st.digifinex.trade.seq,
+            st.digifinex.trade.ts_ns,
+            st.digifinex.trade.source_engine_ts_ns,
+            st.digifinex.trade.source_system_ts_ns,
+            ReferenceSource::DigifinexTrade.idx(),
+            Self::label("digifinex_trade", &st.demean.digifinex),
+            "digifinex",
+            "trade",
+            st.digifinex.trade.received_at,
+        );
+
+        // WEEX sources (adjusted)
+        consider(
+            Self::adjust_price(st.weex.bbo.price, &st.demean.weex),
+            Self::adjust_price(st.weex.bbo.bid_levels[0].map(|lvl| lvl.0), &st.demean.weex),
+            Self::adjust_price(st.weex.bbo.ask_levels[0].map(|lvl| lvl.0), &st.demean.weex),
+            Self::adjust_levels(st.weex.bbo.bid_levels, &st.demean.weex),
+            Self::adjust_levels(st.weex.bbo.ask_levels, &st.demean.weex),
+            st.weex.bbo.direction,
+            st.weex.bbo.size,
+            st.weex.bbo.seq,
+            st.weex.bbo.ts_ns,
+            st.weex.bbo.source_engine_ts_ns,
+            st.weex.bbo.source_system_ts_ns,
+            ReferenceSource::WeexBbo.idx(),
+            Self::label("weex_bbo", &st.demean.weex),
+            "weex",
+            "bbo",
+            st.weex.bbo.received_at,
+        );
+        consider(
+            Self::adjust_price(st.weex.trade.price, &st.demean.weex),
+            None,
+            None,
+            Self::adjust_levels(st.weex.trade.bid_levels, &st.demean.weex),
+            Self::adjust_levels(st.weex.trade.ask_levels, &st.demean.weex),
+            st.weex.trade.direction,
+            st.weex.trade.size,
+            st.weex.trade.seq,
+            st.weex.trade.ts_ns,
+            st.weex.trade.source_engine_ts_ns,
+            st.weex.trade.source_system_ts_ns,
+            ReferenceSource::WeexTrade.idx(),
+            Self::label("weex_trade", &st.demean.weex),
+            "weex",
+            "trade",
+            st.weex.trade.received_at,
         );
 
         // Lighter sources (adjusted)

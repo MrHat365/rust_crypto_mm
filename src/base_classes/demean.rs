@@ -12,6 +12,8 @@ pub enum ExchangeKind {
     Okx,
     Mexc,
     Lighter,
+    Digifinex,
+    Weex,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -109,6 +111,8 @@ pub struct DemeanTracker {
     okx: ExchangeState,
     mexc: ExchangeState,
     lighter: ExchangeState,
+    digifinex: ExchangeState,
+    weex: ExchangeState,
 }
 
 impl DemeanTracker {
@@ -122,6 +126,8 @@ impl DemeanTracker {
             okx: ExchangeState::default(),
             mexc: ExchangeState::default(),
             lighter: ExchangeState::default(),
+            digifinex: ExchangeState::default(),
+            weex: ExchangeState::default(),
         }
     }
 
@@ -153,7 +159,7 @@ impl DemeanTracker {
             _ => return Vec::new(),
         };
 
-        let mut out = Vec::with_capacity(4);
+        let mut out = Vec::with_capacity(8);
         let window_ns = self.window_ns;
         for exchange in [
             ExchangeKind::Bybit,
@@ -162,6 +168,8 @@ impl DemeanTracker {
             ExchangeKind::Okx,
             ExchangeKind::Mexc,
             ExchangeKind::Lighter,
+            ExchangeKind::Digifinex,
+            ExchangeKind::Weex,
         ] {
             let adj = self
                 .state_mut(exchange)
@@ -179,6 +187,8 @@ impl DemeanTracker {
             ExchangeKind::Okx => &mut self.okx,
             ExchangeKind::Mexc => &mut self.mexc,
             ExchangeKind::Lighter => &mut self.lighter,
+            ExchangeKind::Digifinex => &mut self.digifinex,
+            ExchangeKind::Weex => &mut self.weex,
         }
     }
 }

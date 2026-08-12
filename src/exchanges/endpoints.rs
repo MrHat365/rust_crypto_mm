@@ -234,6 +234,43 @@ impl MexcWs {
     }
 }
 
+// ---------------- WEEX ----------------
+pub struct WeexWs;
+impl WeexWs {
+    pub const BASE: &str = "wss://ws-contract.weex.com/v3/ws/public";
+
+    pub const DEPTH15: &str = "depth15";
+    pub const DEPTH200: &str = "depth200";
+    pub const TRADE: &str = "trade";
+    pub const TICKER: &str = "ticker";
+
+    #[inline]
+    pub fn stream(symbol: &str, channel: &str) -> String {
+        format!("{symbol}@{channel}")
+    }
+
+    #[inline]
+    pub fn subscribe(symbol: &str, channel: &str, id: u32) -> String {
+        format!(
+            r#"{{"method":"SUBSCRIBE","params":["{symbol}@{channel}"],"id":{id}}}"#
+        )
+    }
+
+    #[inline]
+    pub fn subscribe_multi(symbol: &str, channels: &[&str]) -> String {
+        let mut s = String::with_capacity(64 + channels.len() * 32);
+        s.push_str(r#"{"method":"SUBSCRIBE","params":["#);
+        for (idx, ch) in channels.iter().enumerate() {
+            if idx > 0 {
+                s.push(',');
+            }
+            s.push_str(&format!(r#""{symbol}@{ch}""#));
+        }
+        s.push_str(r#"],"id":1}"#);
+        s
+    }
+}
+
 // ---------------- Lighter ----------------
 pub struct LighterWs;
 impl LighterWs {
@@ -253,4 +290,60 @@ impl LighterGet {
     pub const BASE: &str = "https://mainnet.zklighter.elliot.ai";
     pub const ORDER_BOOKS: &str = "/api/v1/orderBooks";
     pub const ORDER_BOOK_DETAILS: &str = "/api/v1/orderBookDetails";
+}
+
+// ---------------- DigiFinex ----------------
+pub struct DigiFinexWs;
+impl DigiFinexWs {
+    pub const BASE: &str = "wss://openapi.digifinex.com/swap_ws/v2/";
+
+    pub const DEPTH_UPDATE: &str = "depth.update";
+    pub const TRADES_UPDATE: &str = "trades.update";
+    pub const TICKER_UPDATE: &str = "ticker.update";
+
+    #[inline]
+    pub fn sub_depth(instrument_id: &str, level: u32) -> String {
+        format!(
+            r#"{{"event":"depth.subscribe","id":1,"instrument_id":"{instrument_id}","level":{level}}}"#
+        )
+    }
+
+    #[inline]
+    pub fn sub_trades(instrument_id: &str) -> String {
+        format!(
+            r#"{{"event":"trades.subscribe","id":2,"instrument_id":"{instrument_id}"}}"#
+        )
+    }
+
+    #[inline]
+    pub fn sub_ticker(instrument_id: &str) -> String {
+        format!(
+            r#"{{"event":"ticker.subscribe","id":3,"instrument_id":"{instrument_id}"}}"#
+        )
+    }
+
+    #[inline]
+    pub fn ping(id: u64) -> String {
+        format!(r#"{{"event":"server.ping","id":{id}}}"#)
+    }
+}
+
+pub struct DigiFinexGet;
+impl DigiFinexGet {
+    pub const BASE: &str = "https://openapi.digifinex.com/swap/v2";
+
+    pub const INSTRUMENTS: &str = "/public/instruments";
+    pub const INSTRUMENT_FMT: &str = "/public/instrument?instrument_id={instrument_id}";
+    pub const DEPTH_FMT: &str = "/public/depth?instrument_id={instrument_id}&limit={limit}";
+
+    #[inline]
+    pub fn instrument(instrument_id: &str) -> String {
+        format!("/public/instrument?instrument_id={instrument_id}")
+    }
+
+    #[inline]
+    pub fn depth(instrument_id: &str, limit: Option<u32>) -> String {
+        let limit = limit.unwrap_or(10);
+        format!("/public/depth?instrument_id={instrument_id}&limit={limit}")
+    }
 }
