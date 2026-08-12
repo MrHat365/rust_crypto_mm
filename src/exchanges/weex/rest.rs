@@ -270,16 +270,17 @@ impl WeexClient {
                 truncate(&text)
             );
         }
-        if let Some(code) = value.get("code").and_then(Value::as_str) {
-            if code != "200" && code != "0" {
-                bail!(
-                    "WEEX {} {} returned code={} body={}",
-                    method,
-                    url,
-                    code,
-                    truncate(&text)
-                );
-            }
+        if let Some(code) = value.get("code").and_then(Value::as_str)
+            && code != "200"
+            && code != "0"
+        {
+            bail!(
+                "WEEX {} {} returned code={} body={}",
+                method,
+                url,
+                code,
+                truncate(&text)
+            );
         }
         Ok(value)
     }

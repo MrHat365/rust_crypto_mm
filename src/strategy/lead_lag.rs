@@ -246,11 +246,10 @@ impl BinanceDigiFinexLeadLag {
                 self.config.max_feed_age_ms
             );
         }
-        if let Some(last) = self.last_decision_at {
-            if now.saturating_duration_since(last) < Duration::from_millis(self.config.cooldown_ms)
-            {
-                return Ok(None);
-            }
+        if let Some(last) = self.last_decision_at
+            && now.saturating_duration_since(last) < Duration::from_millis(self.config.cooldown_ms)
+        {
+            return Ok(None);
         }
 
         let expected_move_bps = self.pending_signal_log * 10_000.0;
@@ -393,8 +392,8 @@ mod tests {
 
     fn bbo(mid: f64, timestamp: u64, now: Instant) -> VenueBbo {
         VenueBbo {
-            bid: mid - 0.05,
-            ask: mid + 0.05,
+            bid: mid - 0.005,
+            ask: mid + 0.005,
             exchange_ts_ms: timestamp,
             received_at: now,
         }
