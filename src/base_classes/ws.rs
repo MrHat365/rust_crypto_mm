@@ -81,6 +81,11 @@ pub trait ExchangeHandler: Send + Sync + 'static {
     fn label(&self) -> String {
         self.url().to_string()
     }
+
+    /// Optional HTTP headers for the websocket handshake (e.g. User-Agent).
+    fn connect_headers(&self) -> &[(&str, &str)] {
+        &[]
+    }
 }
 
 // Fixed-size linear-probing map for last seen sequence per stream key.
@@ -207,6 +212,11 @@ fn now_secs() -> u64 {
 }
 
 fn gate_ping_reply(text: &str) -> Option<String> {
+    if text.contains("\"event\":\"ping\"") {
+        if let Some(time) = find_json_string(text, "time") {
+            return Some(format!(r#"{{"event":"pong","time":"{time}"}}"#));
+        }
+    }
     if text.contains("\"channel\":\"futures.ping\"") {
         match find_json_string(text, "event") {
             Some(ev) if ev == "ping" => {}
@@ -304,14 +314,42 @@ fn run_ws_tungstenite<E, const N: usize>(
     E: ExchangeHandler,
 {
     use std::time::{Duration, Instant};
+    use tungstenite::client::IntoClientRequest;
+    use tungstenite::http::{HeaderName, HeaderValue};
     use tungstenite::{Message, connect};
     let url = handler.url().to_string();
     let label = handler.label();
+    let headers = handler.connect_headers();
     let initial_backoff = Duration::from_millis(250);
     let max_backoff = Duration::from_millis(3_000);
     let mut backoff = initial_backoff;
     loop {
-        let (mut socket, _response) = match connect(url::Url::parse(&url).unwrap()) {
+        let mut request = match url::Url::parse(&url) {
+            Ok(parsed) => match parsed.into_client_request() {
+                Ok(req) => req,
+                Err(err) => {
+                    eprintln!("WS[{label}] client request error: {err}");
+                    std::thread::sleep(backoff);
+                    backoff = std::cmp::min(backoff * 2, max_backoff);
+                    continue;
+                }
+            },
+            Err(err) => {
+                eprintln!("WS[{label}] invalid url: {err}");
+                std::thread::sleep(backoff);
+                backoff = std::cmp::min(backoff * 2, max_backoff);
+                continue;
+            }
+        };
+        for (key, value) in headers {
+            if let (Ok(name), Ok(val)) = (
+                HeaderName::from_bytes(key.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                request.headers_mut().insert(name, val);
+            }
+        }
+        let (mut socket, _response) = match connect(request) {
             Ok(ok) => ok,
             Err(err) => {
                 eprintln!(

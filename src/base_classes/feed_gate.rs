@@ -10,6 +10,8 @@ pub enum ExchangeFeed {
     Okx,
     Mexc,
     Lighter,
+    Digifinex,
+    Weex,
 }
 
 #[cfg(test)]
@@ -78,6 +80,8 @@ impl ExchangeFeed {
             ExchangeFeed::Okx => "okx",
             ExchangeFeed::Mexc => "mexc",
             ExchangeFeed::Lighter => "lighter",
+            ExchangeFeed::Digifinex => "digifinex",
+            ExchangeFeed::Weex => "weex",
         }
     }
 }

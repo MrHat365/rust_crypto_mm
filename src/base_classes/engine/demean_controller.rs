@@ -51,6 +51,8 @@ impl DemeanController {
                 ExchangeKind::Okx => &mut st.demean.okx,
                 ExchangeKind::Mexc => &mut st.demean.mexc,
                 ExchangeKind::Lighter => &mut st.demean.lighter,
+                ExchangeKind::Digifinex => &mut st.demean.digifinex,
+                ExchangeKind::Weex => &mut st.demean.weex,
             };
             *target = *adj;
         }

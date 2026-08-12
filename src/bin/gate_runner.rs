@@ -35,7 +35,7 @@ use rust_test::execution::{
 use rust_test::logging::quote::{DebugLogger, QuoteLogHandle, format_f64};
 use rust_test::strategy::{
     MomentumFadeStrategy, ReferenceMeta, SimpleQuoteStrategy, SizeSpec, StrategyEngine,
-    StrategyKind,
+    StrategyKind, AvellanedaStoikovStrategy, LeadLagStrategy,
 };
 use rust_test::utils::parsing::log_parse_drop;
 use serde_json::{Value, json};
@@ -1115,6 +1115,27 @@ async fn main() -> Result<()> {
                 base_size,
             ))
         }
+        StrategyKind::AvellanedaStoikov => {
+            let as_cfg = config
+                .avellaneda_stoikov
+                .clone()
+                .expect("avellaneda_stoikov config missing");
+            StrategyEngine::Avellaneda(AvellanedaStoikovStrategy::new(
+                as_cfg,
+                config.strategy.venue,
+                config.strategy.symbol.clone(),
+                config.strategy.min_tick,
+                base_size,
+            ))
+        }
+        StrategyKind::LeadLag => {
+            let ll_cfg = config.lead_lag.clone().expect("lead_lag config missing");
+            StrategyEngine::LeadLag(LeadLagStrategy::new(
+                ll_cfg,
+                base_size,
+                config.strategy.min_tick,
+            ))
+        }
     }));
     debug.info(|| format!("using base size {:.6}", base_size));
 
@@ -1217,6 +1238,16 @@ async fn main() -> Result<()> {
     let quote_interval_ms = match config.strategy_kind {
         StrategyKind::MomentumFade => config
             .momentum_fade
+            .as_ref()
+            .map(|cfg| cfg.min_interval_ms)
+            .unwrap_or(config.strategy.quote_interval_ms),
+        StrategyKind::AvellanedaStoikov => config
+            .avellaneda_stoikov
+            .as_ref()
+            .map(|cfg| cfg.quote_interval_ms)
+            .unwrap_or(config.strategy.quote_interval_ms),
+        StrategyKind::LeadLag => config
+            .lead_lag
             .as_ref()
             .map(|cfg| cfg.min_interval_ms)
             .unwrap_or(config.strategy.quote_interval_ms),
@@ -1601,6 +1632,16 @@ async fn handle_quote_tick(
         let debounce_budget_ms = match config_ref.strategy_kind {
             StrategyKind::MomentumFade => config_ref
                 .momentum_fade
+                .as_ref()
+                .map(|cfg| cfg.min_interval_ms)
+                .unwrap_or(config_ref.strategy.quote_interval_ms),
+            StrategyKind::AvellanedaStoikov => config_ref
+                .avellaneda_stoikov
+                .as_ref()
+                .map(|cfg| cfg.quote_interval_ms)
+                .unwrap_or(config_ref.strategy.quote_interval_ms),
+            StrategyKind::LeadLag => config_ref
+                .lead_lag
                 .as_ref()
                 .map(|cfg| cfg.min_interval_ms)
                 .unwrap_or(config_ref.strategy.quote_interval_ms),

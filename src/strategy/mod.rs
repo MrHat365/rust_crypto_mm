@@ -7,9 +7,14 @@ use serde::Deserialize;
 use crate::base_classes::reference::ReferenceEvent;
 use crate::execution::{ClientOrderId, ExecutionReport};
 
+pub mod avellaneda_stoikov;
+pub mod lead_lag;
 pub mod momentum_fade;
+pub mod orderflow_toxicity;
 pub mod simple_quote;
 
+pub use avellaneda_stoikov::{AvellanedaStoikovConfig, AvellanedaStoikovStrategy};
+pub use lead_lag::{LeadLagConfig, LeadLagDirection, LeadLagStrategy};
 pub use momentum_fade::{EntryPriceSource, MomentumFadeConfig, MomentumFadeStrategy};
 pub use simple_quote::{
     QuoteConfig, QuotePlan, QuoteStateMetrics, ReferenceMeta, SimpleQuoteStrategy, SizeSpec,
@@ -20,6 +25,8 @@ pub use simple_quote::{
 pub enum StrategyKind {
     SimpleQuote,
     MomentumFade,
+    AvellanedaStoikov,
+    LeadLag,
 }
 
 impl Default for StrategyKind {
@@ -33,6 +40,8 @@ impl StrategyKind {
         match self {
             StrategyKind::SimpleQuote => "simple_quote",
             StrategyKind::MomentumFade => "momentum_fade",
+            StrategyKind::AvellanedaStoikov => "avellaneda_stoikov",
+            StrategyKind::LeadLag => "lead_lag",
         }
     }
 }
@@ -50,6 +59,8 @@ pub struct FillContext {
 pub enum StrategyEngine {
     Simple(SimpleQuoteStrategy),
     Momentum(MomentumFadeStrategy),
+    Avellaneda(AvellanedaStoikovStrategy),
+    LeadLag(LeadLagStrategy),
 }
 
 impl StrategyEngine {
@@ -63,6 +74,8 @@ impl StrategyEngine {
                 }
             }
             StrategyEngine::Momentum(strategy) => strategy.on_market_update(reference),
+            StrategyEngine::Avellaneda(strategy) => strategy.on_market_update(reference),
+            StrategyEngine::LeadLag(strategy) => strategy.on_market_update(reference),
         }
     }
 
@@ -70,6 +83,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.plan_quotes(now),
             StrategyEngine::Momentum(strategy) => strategy.plan_quotes(now),
+            StrategyEngine::Avellaneda(strategy) => strategy.plan_quotes(now),
+            StrategyEngine::LeadLag(strategy) => strategy.plan_quotes(now),
         }
     }
 
@@ -77,6 +92,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.commit_plan(plan),
             StrategyEngine::Momentum(strategy) => strategy.commit_plan(plan),
+            StrategyEngine::Avellaneda(strategy) => strategy.commit_plan(plan),
+            StrategyEngine::LeadLag(strategy) => strategy.commit_plan(plan),
         }
     }
 
@@ -84,6 +101,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.rollback_plan(plan),
             StrategyEngine::Momentum(strategy) => strategy.rollback_plan(plan),
+            StrategyEngine::Avellaneda(strategy) => strategy.rollback_plan(plan),
+            StrategyEngine::LeadLag(strategy) => strategy.rollback_plan(plan),
         }
     }
 
@@ -91,6 +110,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.state_metrics(),
             StrategyEngine::Momentum(strategy) => strategy.state_metrics(),
+            StrategyEngine::Avellaneda(strategy) => strategy.state_metrics(),
+            StrategyEngine::LeadLag(strategy) => strategy.state_metrics(),
         }
     }
 
@@ -98,6 +119,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.handle_report(report),
             StrategyEngine::Momentum(strategy) => strategy.handle_report(report),
+            StrategyEngine::Avellaneda(strategy) => strategy.handle_report(report),
+            StrategyEngine::LeadLag(strategy) => strategy.handle_report(report),
         }
     }
 
@@ -105,6 +128,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.latest_price(),
             StrategyEngine::Momentum(strategy) => strategy.latest_price(),
+            StrategyEngine::Avellaneda(strategy) => strategy.latest_price(),
+            StrategyEngine::LeadLag(strategy) => strategy.latest_price(),
         }
     }
 
@@ -112,6 +137,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.fill_context(order_id, now),
             StrategyEngine::Momentum(strategy) => strategy.fill_context(order_id, now),
+            StrategyEngine::Avellaneda(strategy) => strategy.fill_context(order_id, now),
+            StrategyEngine::LeadLag(strategy) => strategy.fill_context(order_id, now),
         }
     }
 
@@ -119,6 +146,8 @@ impl StrategyEngine {
         match self {
             StrategyEngine::Simple(strategy) => strategy.idle_reason(),
             StrategyEngine::Momentum(strategy) => strategy.idle_reason(),
+            StrategyEngine::Avellaneda(strategy) => strategy.idle_reason(),
+            StrategyEngine::LeadLag(strategy) => strategy.idle_reason(),
         }
     }
 }

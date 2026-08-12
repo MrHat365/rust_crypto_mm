@@ -33,6 +33,10 @@ gate_exec = [
     "dep:libc",
 ]
 
+[dependencies.flate2]
+version = "1"
+features = ["zlib"]
+
 [dependencies.tungstenite]
 version = "0.21"
 optional = true

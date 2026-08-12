@@ -254,3 +254,25 @@ impl LighterGet {
     pub const ORDER_BOOKS: &str = "/api/v1/orderBooks";
     pub const ORDER_BOOK_DETAILS: &str = "/api/v1/orderBookDetails";
 }
+
+// ---------------- Digifinex ----------------
+pub struct DigifinexWs;
+impl DigifinexWs {
+    pub const BASE: &str = "wss://openapi.digifinex.com/swap_ws/v2/";
+}
+
+pub struct DigifinexGet;
+impl DigifinexGet {
+    pub const BASE: &str = "https://openapi.digifinex.com/swap/v2";
+}
+
+// ---------------- Weex ----------------
+pub struct WeexWs;
+impl WeexWs {
+    pub const PUBLIC_BASE: &str = "wss://ws-contract.weex.com/v3/ws/public";
+}
+
+pub struct WeexGet;
+impl WeexGet {
+    pub const BASE: &str = "https://api-contract.weex.com/capi/v3";
+}

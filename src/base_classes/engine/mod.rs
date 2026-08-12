@@ -5,11 +5,13 @@ mod bitget;
 mod bybit;
 mod config;
 mod demean_controller;
+mod digifinex;
 mod gate;
 mod helpers;
 mod lighter;
 mod mexc;
 mod okx;
+mod weex;
 
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -29,12 +31,16 @@ use crate::base_classes::ws::{FeedSignal, spawn_ws_worker};
 use crate::exchanges::binance::BinanceHandler;
 use crate::exchanges::bitget::BitgetHandler;
 use crate::exchanges::bybit::BybitHandler;
+use crate::exchanges::digifinex::{
+    DigifinexHandler, fetch_instrument_supported, to_instrument_id,
+};
 use crate::exchanges::gate::{GateHandler, canonical_contract_symbol};
 use crate::exchanges::lighter::{LighterHandler, LighterMarketMeta, fetch_market_meta_async};
 use crate::exchanges::mexc::{
     MexcContractMeta, MexcHandler, fetch_contract_meta as fetch_mexc_contract_meta,
 };
 use crate::exchanges::okx::{OkxHandler, OkxInstrumentMeta, fetch_instrument_meta};
+use crate::exchanges::weex::{WeexHandler, fetch_symbol_supported, normalize_symbol};
 use crate::pricing::PricingModelConfig;
 
 #[cfg(feature = "gate_exec")]
@@ -252,6 +258,8 @@ pub fn spawn_state_engine(
         let okx_auto = feeds.okx.is_auto();
         let mexc_auto = feeds.mexc.is_auto();
         let lighter_auto = feeds.lighter.is_auto();
+        let digifinex_auto = feeds.digifinex.is_auto();
+        let weex_auto = feeds.weex.is_auto();
 
         let symbol_uc = symbol.to_uppercase();
         let cross_venue_symbol = symbol_uc.replace('_', "");
@@ -260,6 +268,8 @@ pub fn spawn_state_engine(
         let bitget_symbol = cross_venue_symbol.clone();
         let okx_inst_id = format_okx_inst_id(&symbol);
         let mexc_symbol = symbol_uc.replace('/', "_");
+        let digifinex_instrument = to_instrument_id(&symbol);
+        let weex_symbol = normalize_symbol(&symbol);
         let gate_contract = canonical_contract_symbol(&symbol);
         let gate_symbol = gate_contract.clone();
         let lighter_symbol = crate::exchanges::lighter::rest::normalize_symbol(&symbol);
@@ -271,6 +281,8 @@ pub fn spawn_state_engine(
             okx_meta_result,
             mexc_meta_result,
             lighter_meta,
+            digifinex_supported,
+            weex_supported,
         ): (
             Option<crate::exchanges::gate::GateContractMeta>,
             bool,
@@ -278,6 +290,8 @@ pub fn spawn_state_engine(
             Result<Option<OkxInstrumentMeta>, reqwest::Error>,
             Result<Option<MexcContractMeta>, reqwest::Error>,
             Option<LighterMarketMeta>,
+            bool,
+            bool,
         ) = rt.block_on(async {
             let gate_meta = crate::exchanges::gate::fetch_contract_meta_async(&gate_contract);
             let bybit_fut = async {
@@ -315,13 +329,29 @@ pub fn spawn_state_engine(
                     None
                 }
             };
+            let digifinex_fut = async {
+                if digifinex_auto {
+                    fetch_instrument_supported(&digifinex_instrument).await
+                } else {
+                    true
+                }
+            };
+            let weex_fut = async {
+                if weex_auto {
+                    fetch_symbol_supported(&weex_symbol).await
+                } else {
+                    true
+                }
+            };
             tokio::join!(
                 gate_meta,
                 bybit_fut,
                 bitget_fut,
                 okx_fut,
                 mexc_fut,
-                lighter_fut
+                lighter_fut,
+                digifinex_fut,
+                weex_fut
             )
         });
 
@@ -429,6 +459,29 @@ pub fn spawn_state_engine(
             false
         };
 
+        let digifinex_enabled = if digifinex_auto {
+            if !digifinex_supported {
+                eprintln!(
+                    "Digifinex instrument {} not found; disabling Digifinex feeds (auto mode)",
+                    digifinex_instrument
+                );
+            }
+            digifinex_supported
+        } else {
+            feeds.digifinex.initial_enabled()
+        };
+        let weex_enabled = if weex_auto {
+            if !weex_supported {
+                eprintln!(
+                    "Weex symbol {} not found; disabling Weex feeds (auto mode)",
+                    weex_symbol
+                );
+            }
+            weex_supported
+        } else {
+            feeds.weex.initial_enabled()
+        };
+
         let mut bybit_c = if feeds.bybit.initial_enabled() && bybit_supported {
             let (consumer, _jh) = spawn_ws_worker::<BybitHandler, N>(
                 BybitHandler::new(symbol.clone()),
@@ -503,6 +556,26 @@ pub fn spawn_state_engine(
         } else {
             None
         };
+        let mut digifinex_c = if digifinex_enabled {
+            let (consumer, _jh) = spawn_ws_worker::<DigifinexHandler, N>(
+                DigifinexHandler::new(symbol.clone()),
+                None,
+                Some(wake_signal.clone()),
+            );
+            Some(consumer)
+        } else {
+            None
+        };
+        let mut weex_c = if weex_enabled {
+            let (consumer, _jh) = spawn_ws_worker::<WeexHandler, N>(
+                WeexHandler::new(symbol.clone()),
+                None,
+                Some(wake_signal.clone()),
+            );
+            Some(consumer)
+        } else {
+            None
+        };
         #[cfg(feature = "gate_exec")]
         {
             if gate_c.is_some() {
@@ -561,6 +634,12 @@ pub fn spawn_state_engine(
         let mut lighter_engine = lighter_c.take().map(|(consumer, meta)| {
             lighter::LighterEngine::new(lighter_symbol.clone(), meta, consumer)
         });
+        let mut digifinex_engine = digifinex_c.take().map(|consumer| {
+            digifinex::DigifinexEngine::new(digifinex_instrument.clone(), consumer)
+        });
+        let mut weex_engine = weex_c
+            .take()
+            .map(|consumer| weex::WeexEngine::new(weex_symbol.clone(), consumer));
 
         loop {
             let mut progressed = false;
@@ -587,6 +666,12 @@ pub fn spawn_state_engine(
             if let Some(engine) = lighter_engine.as_mut() {
                 progressed |=
                     engine.process(&mut feed_gate, &mut publisher, &mut demean, &fast_sender);
+            }
+            if let Some(engine) = digifinex_engine.as_mut() {
+                progressed |= engine.process(&mut feed_gate, &mut publisher, &mut demean);
+            }
+            if let Some(engine) = weex_engine.as_mut() {
+                progressed |= engine.process(&mut feed_gate, &mut publisher, &mut demean);
             }
 
             if progressed {

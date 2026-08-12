@@ -9,7 +9,10 @@ use crate::base_classes::feed_config::FeedToggles;
 use crate::execution::types::Venue;
 use crate::execution::{GateCredentials, LighterCredentials};
 use crate::pricing::PricingModelConfig;
-use crate::strategy::{MomentumFadeConfig, QuoteConfig, StrategyKind};
+use crate::strategy::{
+    AvellanedaStoikovConfig, AvellanedaStoikovStrategy, LeadLagConfig, LeadLagStrategy,
+    MomentumFadeConfig, QuoteConfig, StrategyKind,
+};
 
 fn default_true() -> bool {
     true
@@ -106,6 +109,10 @@ pub struct RunnerConfig {
     pub strategy: QuoteConfig,
     #[serde(default)]
     pub momentum_fade: Option<MomentumFadeConfig>,
+    #[serde(default)]
+    pub avellaneda_stoikov: Option<AvellanedaStoikovConfig>,
+    #[serde(default)]
+    pub lead_lag: Option<LeadLagConfig>,
     pub risk: RiskConfig,
     pub mode: ModeConfig,
     #[serde(default)]
@@ -369,6 +376,37 @@ pub fn validate_runner_config(config: &RunnerConfig) -> Result<()> {
                         config.risk.max_position_notional
                     );
                 }
+            }
+        }
+        StrategyKind::AvellanedaStoikov => {
+            let Some(as_cfg) = config.avellaneda_stoikov.as_ref() else {
+                bail!("strategy_kind=avellaneda_stoikov requires avellaneda_stoikov config");
+            };
+            if as_cfg.gamma < 0.0 || !as_cfg.gamma.is_finite() {
+                bail!("avellaneda_stoikov.gamma must be finite and >= 0");
+            }
+            if as_cfg.k <= 0.0 || !as_cfg.k.is_finite() {
+                bail!("avellaneda_stoikov.k must be finite and > 0");
+            }
+            if as_cfg.inventory_limit <= 0.0 {
+                bail!("avellaneda_stoikov.inventory_limit must be > 0");
+            }
+        }
+        StrategyKind::LeadLag => {
+            let Some(ll) = config.lead_lag.as_ref() else {
+                bail!("strategy_kind=lead_lag requires lead_lag config");
+            };
+            if ll.leader_source_prefix.trim().is_empty() {
+                bail!("lead_lag.leader_source_prefix must be set");
+            }
+            if ll.follower_symbol.trim().is_empty() {
+                bail!("lead_lag.follower_symbol must be set");
+            }
+            if !config.feeds.binance.initial_enabled() {
+                bail!("lead_lag strategy requires feeds.binance enabled");
+            }
+            if !config.feeds.digifinex.initial_enabled() {
+                bail!("lead_lag strategy requires feeds.digifinex enabled");
             }
         }
     }

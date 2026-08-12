@@ -1,0 +1,38 @@
+strategy_kind: lead_lag
+
+strategy:
+  venue: gate
+  symbol: BTC_USDT
+  size: 0.001
+  min_tick: 0.1
+  quote_interval_ms: 100
+
+lead_lag:
+  leader_source_prefix: binance
+  follower_venue: gate
+  follower_symbol: BTC_USDT
+  entry_threshold_bps: 3.0
+  exit_threshold_bps: 0.5
+  max_position: 0.01
+  min_interval_ms: 100
+  signal_persist_ms: 150
+
+risk:
+  max_order_notional: 500
+  max_position_notional: 1000
+
+mode:
+  dry_run: true
+  demean_prices: true
+  debug_prints: true
+
+feeds:
+  gate: true
+  binance: true
+  digifinex: true
+  bybit: false
+  bitget: false
+  okx: false
+  mexc: false
+  lighter: false
+  weex: false
