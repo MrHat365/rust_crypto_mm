@@ -254,3 +254,61 @@ impl LighterGet {
     pub const ORDER_BOOKS: &str = "/api/v1/orderBooks";
     pub const ORDER_BOOK_DETAILS: &str = "/api/v1/orderBookDetails";
 }
+
+// ---------------- Digifinex Swap v2 ----------------
+pub struct DigifinexWs;
+impl DigifinexWs {
+    pub const BASE: &str = "wss://openapi.digifinex.com/swap_ws/v2/";
+    pub const PING: &str = "server.ping";
+    pub const TICKER: &str = "ticker";
+    pub const DEPTH: &str = "depth";
+    pub const TRADES: &str = "trades";
+
+    #[inline]
+    pub fn ping(id: u64) -> String {
+        format!(r#"{{"event":"server.ping","id":{id}}}"#)
+    }
+
+    #[inline]
+    pub fn subscribe(event: &str, instrument_id: &str, id: u64) -> String {
+        format!(r#"{{"event":"{event}.subscribe","id":{id},"instrument_id":"{instrument_id}"}}"#)
+    }
+
+    #[inline]
+    pub fn subscribe_depth(instrument_id: &str, level: u32, id: u64) -> String {
+        format!(
+            r#"{{"event":"depth.subscribe","id":{id},"instrument_id":"{instrument_id}","level":{level}}}"#
+        )
+    }
+}
+
+pub struct DigifinexGet;
+impl DigifinexGet {
+    pub const BASE: &str = "https://openapi.digifinex.com";
+    pub const INSTRUMENT: &str = "/swap/v2/public/instrument";
+    pub const INSTRUMENTS: &str = "/swap/v2/public/instruments";
+    pub const DEPTH: &str = "/swap/v2/public/depth";
+    pub const TICKER: &str = "/swap/v2/public/ticker";
+    pub const TIME: &str = "/swap/v2/public/time";
+}
+
+// ---------------- WEEX Contract v3 ----------------
+pub struct WeexWs;
+impl WeexWs {
+    pub const PUBLIC_BASE: &str = "wss://ws-contract.weex.com/v3/ws/public";
+    pub const PRIVATE_BASE: &str = "wss://ws-contract.weex.com/v3/ws/private";
+    pub const PONG: &str = r#"{"method":"PONG","id":1}"#;
+
+    #[inline]
+    pub fn subscribe(symbol: &str) -> String {
+        format!(
+            r#"{{"method":"SUBSCRIBE","params":["{symbol}@depth15","{symbol}@trade","{symbol}@ticker"],"id":1}}"#
+        )
+    }
+}
+
+pub struct WeexGet;
+impl WeexGet {
+    pub const BASE: &str = "https://api-contract.weex.com";
+    pub const DEPTH: &str = "/capi/v3/market/depth";
+}

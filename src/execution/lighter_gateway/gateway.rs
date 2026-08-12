@@ -543,7 +543,7 @@ impl LighterGateway {
             || msg.contains("lighter ws send queue closed")
     }
 
-    fn is_nonce_consuming_failure(err: &anyhow::Error) -> bool {
+    pub(super) fn is_nonce_consuming_failure(err: &anyhow::Error) -> bool {
         err.to_string()
             .contains("lighter account_tx reported tx failure")
     }

@@ -10,7 +10,7 @@ edition = "2024"
 default = ["parse_binance", "binance_book", "bitget_book", "ws_tungstenite"]
 
 # High-performance client options (enable one when you’re ready):
-ws_tungstenite = ["dep:tungstenite", "dep:url"]
+ws_tungstenite = ["dep:tungstenite", "dep:url", "dep:http"]
 ws_fast = ["dep:fastwebsockets", "dep:hyper", "dep:hyper-util", "dep:tokio", "dep:bytes", "dep:http"]
 affinity = ["dep:libc"]
 parse_binance = ["dep:serde", "dep:serde_json"]
@@ -59,6 +59,9 @@ features = ["client", "http1", "http2", "tokio"]
 [dependencies.http]
 version = "1"
 optional = true
+
+[dependencies.flate2]
+version = "1"
 
 [dependencies.tokio]
 version = "1"

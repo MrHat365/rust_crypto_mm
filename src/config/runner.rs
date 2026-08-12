@@ -9,7 +9,7 @@ use crate::base_classes::feed_config::FeedToggles;
 use crate::execution::types::Venue;
 use crate::execution::{GateCredentials, LighterCredentials};
 use crate::pricing::PricingModelConfig;
-use crate::strategy::{MomentumFadeConfig, QuoteConfig, StrategyKind};
+use crate::strategy::{LeadLagConfig, MomentumFadeConfig, QuoteConfig, StrategyKind, ToxicityMmConfig};
 
 fn default_true() -> bool {
     true
@@ -106,6 +106,10 @@ pub struct RunnerConfig {
     pub strategy: QuoteConfig,
     #[serde(default)]
     pub momentum_fade: Option<MomentumFadeConfig>,
+    #[serde(default)]
+    pub toxicity_mm: Option<ToxicityMmConfig>,
+    #[serde(default)]
+    pub lead_lag: Option<LeadLagConfig>,
     pub risk: RiskConfig,
     pub mode: ModeConfig,
     #[serde(default)]
@@ -270,6 +274,12 @@ pub fn validate_runner_config(config: &RunnerConfig) -> Result<()> {
             if config.momentum_fade.is_some() {
                 bail!("momentum_fade config present but strategy_kind is simple_quote");
             }
+            if config.toxicity_mm.is_some() {
+                bail!("toxicity_mm config present but strategy_kind is simple_quote");
+            }
+            if config.lead_lag.is_some() {
+                bail!("lead_lag config present but strategy_kind is simple_quote");
+            }
         }
         StrategyKind::MomentumFade => {
             let Some(momentum) = config.momentum_fade.as_ref() else {
@@ -369,6 +379,73 @@ pub fn validate_runner_config(config: &RunnerConfig) -> Result<()> {
                         config.risk.max_position_notional
                     );
                 }
+            }
+        }
+        StrategyKind::ToxicityMm => {
+            let Some(mm) = config.toxicity_mm.as_ref() else {
+                bail!("strategy_kind=toxicity_mm requires toxicity_mm config");
+            };
+            if !mm.gamma.is_finite() || mm.gamma < 0.0 {
+                bail!("toxicity_mm.gamma must be finite and >= 0");
+            }
+            if !mm.k.is_finite() || mm.k <= 0.0 {
+                bail!("toxicity_mm.k must be finite and > 0");
+            }
+            if !mm.tau_secs.is_finite() || mm.tau_secs <= 0.0 {
+                bail!("toxicity_mm.tau_secs must be finite and > 0");
+            }
+            if !mm.sigma_floor.is_finite() || mm.sigma_floor < 0.0 {
+                bail!("toxicity_mm.sigma_floor must be finite and >= 0");
+            }
+            if !mm.ofi_gain.is_finite() {
+                bail!("toxicity_mm.ofi_gain must be finite");
+            }
+            if !mm.toxicity_gain.is_finite() || mm.toxicity_gain < 0.0 {
+                bail!("toxicity_mm.toxicity_gain must be finite and >= 0");
+            }
+            if !mm.vpin_bucket_usd.is_finite() || mm.vpin_bucket_usd <= 0.0 {
+                bail!("toxicity_mm.vpin_bucket_usd must be finite and > 0");
+            }
+            if mm.vpin_buckets == 0 {
+                bail!("toxicity_mm.vpin_buckets must be > 0");
+            }
+            if !mm.inventory_limit.is_finite() || mm.inventory_limit < 0.0 {
+                bail!("toxicity_mm.inventory_limit must be finite and >= 0");
+            }
+            if !mm.kyle_gain.is_finite() || mm.kyle_gain < 0.0 {
+                bail!("toxicity_mm.kyle_gain must be finite and >= 0");
+            }
+        }
+        StrategyKind::LeadLag => {
+            let Some(ll) = config.lead_lag.as_ref() else {
+                bail!("strategy_kind=lead_lag requires lead_lag config");
+            };
+            if !config.feeds.binance.initial_enabled() {
+                bail!("lead_lag strategy requires feeds.binance to be enabled");
+            }
+            if !config.feeds.digifinex.initial_enabled() {
+                bail!("lead_lag strategy requires feeds.digifinex to be enabled");
+            }
+            if !ll.min_entry_spread_bps.is_finite() || ll.min_entry_spread_bps < 0.0 {
+                bail!("lead_lag.min_entry_spread_bps must be finite and >= 0");
+            }
+            if !ll.exit_spread_bps.is_finite() || ll.exit_spread_bps < 0.0 {
+                bail!("lead_lag.exit_spread_bps must be finite and >= 0");
+            }
+            if ll.min_persist_ms == 0 {
+                bail!("lead_lag.min_persist_ms must be > 0");
+            }
+            if ll.max_quote_skew_ms == 0 || ll.max_quote_age_ms == 0 {
+                bail!("lead_lag max_quote_skew_ms and max_quote_age_ms must be > 0");
+            }
+            if !ll.min_leader_depth_usd.is_finite() || ll.min_leader_depth_usd < 0.0 {
+                bail!("lead_lag.min_leader_depth_usd must be finite and >= 0");
+            }
+            if ll.cooldown_ms == 0 {
+                bail!("lead_lag.cooldown_ms must be > 0");
+            }
+            if ll.max_hold_ms == 0 {
+                bail!("lead_lag.max_hold_ms must be > 0");
             }
         }
     }
@@ -709,6 +786,22 @@ pub fn log_runner_config(config: &RunnerConfig) {
         eprintln!("Settle currency: <unset>");
     }
 
+    if config.strategy_kind == StrategyKind::ToxicityMm {
+        if let Some(mm) = config.toxicity_mm.as_ref() {
+            eprintln!(
+                "Toxicity MM: gamma={}, k={}, tau_secs={}, ofi_gain={}, toxicity_gain={}, kyle_gain={}, vpin_bucket_usd={}, vpin_buckets={}",
+                mm.gamma, mm.k, mm.tau_secs, mm.ofi_gain, mm.toxicity_gain, mm.kyle_gain, mm.vpin_bucket_usd, mm.vpin_buckets
+            );
+        }
+    }
+    if config.strategy_kind == StrategyKind::LeadLag {
+        if let Some(ll) = config.lead_lag.as_ref() {
+            eprintln!(
+                "Lead-lag: leader=binance lagger=digifinex min_entry_spread_bps={} exit_spread_bps={} persist_ms={} max_skew_ms={}",
+                ll.min_entry_spread_bps, ll.exit_spread_bps, ll.min_persist_ms, ll.max_quote_skew_ms
+            );
+        }
+    }
     if config.strategy_kind == StrategyKind::MomentumFade {
         if let Some(momentum) = config.momentum_fade.as_ref() {
             eprintln!(
@@ -866,5 +959,62 @@ mode:
         assert!(cfg.mode.suppress_quote_loop_idle_logs);
         assert!(cfg.mode.suppress_inventory_rollback_warnings);
         assert!(cfg.mode.suppress_lighter_sendtx_quota_logs);
+    }
+
+    #[test]
+    fn toxicity_mm_config_validates() {
+        let yaml = r#"
+strategy_kind: toxicity_mm
+strategy:
+  venue: gate
+  symbol: BTC_USDT
+  size: 1
+toxicity_mm:
+  gamma: 0.08
+  k: 1.5
+  tau_secs: 8.0
+risk:
+  max_order_notional: 10
+  max_position_notional: 20
+mode:
+  dry_run: true
+"#;
+        let cfg = serde_yaml::from_str::<RunnerConfig>(yaml).expect("yaml parse");
+        validate_runner_config(&cfg).expect("validation should pass");
+        assert_eq!(cfg.strategy_kind, StrategyKind::ToxicityMm);
+    }
+
+    #[test]
+    fn lead_lag_config_requires_binance_and_digifinex() {
+        let yaml = r#"
+strategy_kind: lead_lag
+strategy:
+  venue: gate
+  symbol: BTC_USDT
+  size: 1
+lead_lag:
+  min_entry_spread_bps: 3.0
+feeds:
+  gate: true
+  binance: false
+  bybit: auto
+  bitget: auto
+  okx: auto
+  mexc: false
+  lighter: auto
+  digifinex: auto
+  weex: auto
+risk:
+  max_order_notional: 10
+  max_position_notional: 20
+mode:
+  dry_run: true
+"#;
+        let cfg = serde_yaml::from_str::<RunnerConfig>(yaml).expect("yaml parse");
+        let err = validate_runner_config(&cfg).expect_err("validation should fail");
+        assert!(
+            err.to_string().contains("feeds.binance"),
+            "unexpected error: {err}"
+        );
     }
 }

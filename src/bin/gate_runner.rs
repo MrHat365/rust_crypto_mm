@@ -35,7 +35,7 @@ use rust_test::execution::{
 use rust_test::logging::quote::{DebugLogger, QuoteLogHandle, format_f64};
 use rust_test::strategy::{
     MomentumFadeStrategy, ReferenceMeta, SimpleQuoteStrategy, SizeSpec, StrategyEngine,
-    StrategyKind,
+    StrategyKind, ToxicityMmStrategy, LeadLagStrategy,
 };
 use rust_test::utils::parsing::log_parse_drop;
 use serde_json::{Value, json};
@@ -1115,6 +1115,25 @@ async fn main() -> Result<()> {
                 base_size,
             ))
         }
+        StrategyKind::ToxicityMm => {
+            let mm = config
+                .toxicity_mm
+                .clone()
+                .expect("toxicity_mm config missing");
+            StrategyEngine::Toxicity(ToxicityMmStrategy::new(
+                mm,
+                config.strategy.clone(),
+                base_size,
+            ))
+        }
+        StrategyKind::LeadLag => {
+            let ll = config.lead_lag.clone().expect("lead_lag config missing");
+            StrategyEngine::LeadLag(LeadLagStrategy::new(
+                ll,
+                config.strategy.clone(),
+                base_size,
+            ))
+        }
     }));
     debug.info(|| format!("using base size {:.6}", base_size));
 
@@ -1220,7 +1239,9 @@ async fn main() -> Result<()> {
             .as_ref()
             .map(|cfg| cfg.min_interval_ms)
             .unwrap_or(config.strategy.quote_interval_ms),
-        StrategyKind::SimpleQuote => config.strategy.quote_interval_ms,
+        StrategyKind::SimpleQuote | StrategyKind::ToxicityMm | StrategyKind::LeadLag => {
+            config.strategy.quote_interval_ms
+        }
     };
     let mut quote_timer = interval(Duration::from_millis(quote_interval_ms.max(1)));
     // Skip missed ticks so quoting never starves the cancel hot path
@@ -1604,7 +1625,9 @@ async fn handle_quote_tick(
                 .as_ref()
                 .map(|cfg| cfg.min_interval_ms)
                 .unwrap_or(config_ref.strategy.quote_interval_ms),
-            StrategyKind::SimpleQuote => config_ref.strategy.quote_interval_ms,
+            StrategyKind::SimpleQuote | StrategyKind::ToxicityMm | StrategyKind::LeadLag => {
+                config_ref.strategy.quote_interval_ms
+            }
         };
         let debounce_budget = Duration::from_millis(debounce_budget_ms.max(1));
         let (reference_instant, timer_wait) = if let Some(meta) = ref_meta.as_ref() {

@@ -34,7 +34,7 @@ impl LighterWsWorker {
         self.cfg.suppress_sendtx_quota_logs && is_lighter_sendtx_quota_error(err_msg)
     }
 
-    fn collect_expected_tx_hashes(txs: &[(SignedTx, ClientOrderId)]) -> Result<Vec<String>> {
+    pub(super) fn collect_expected_tx_hashes(txs: &[(SignedTx, ClientOrderId)]) -> Result<Vec<String>> {
         let mut hashes = Vec::new();
         let mut seen = HashSet::new();
         for (tx, client_order_id) in txs {
@@ -225,7 +225,7 @@ impl LighterWsWorker {
         has_code || has_hash
     }
 
-    fn remove_pending_batch(
+    pub(super) fn remove_pending_batch(
         pending: &mut HashMap<String, PendingSendTxBatch>,
         pending_by_hash: &mut HashMap<String, String>,
         req_id: Option<String>,

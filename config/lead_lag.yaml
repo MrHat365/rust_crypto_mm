@@ -1,0 +1,42 @@
+strategy_kind: lead_lag
+strategy:
+  venue: gate
+  symbol: BTC_USDT
+  size: 1
+  quote_interval_ms: 20
+  max_age_ms: 400
+  cancellation_delay_ms: 10
+lead_lag:
+  min_entry_spread_bps: 3.0
+  exit_spread_bps: 0.5
+  min_persist_ms: 80
+  max_quote_skew_ms: 250
+  max_quote_age_ms: 400
+  min_leader_depth_usd: 25000.0
+  cooldown_ms: 1500
+  max_hold_ms: 5000
+feeds:
+  gate: true
+  binance: true
+  bybit: false
+  bitget: false
+  okx: false
+  mexc: false
+  lighter: false
+  digifinex: true
+  weex: false
+risk:
+  max_order_notional: 400.0
+  max_position_notional: 500.0
+mode:
+  dry_run: true
+  log_fills: false
+  debug_prints: true
+  demean_prices: false
+logging:
+  enabled: true
+  path: logs/lead_lag.csv
+  flush_interval_ms: 200
+credentials:
+  api_key_env: gateio_api_key
+  api_secret_env: gateio_secret_key

@@ -96,6 +96,8 @@ feeds:
   okx: auto
   mexc: false
   lighter: true
+  digifinex: auto
+  weex: auto
 risk:
   max_order_notional: 100.0
   max_position_notional: 200.0

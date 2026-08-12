@@ -15,6 +15,8 @@
 //! - **OKX**: Market data (perpetual futures)
 //! - **MEXC**: Market data
 //! - **Lighter**: Market data
+//! - **Digifinex**: Market data (USDT perpetual swap v2)
+//! - **Weex**: Market data (USDT perpetual contract v3)
 //!
 //! # Adding a New Exchange
 //! 1. Create `src/exchanges/{exchange}/` directory
@@ -28,10 +30,12 @@ pub mod binance;
 pub mod bitget;
 pub mod bybit;
 pub mod endpoints;
+pub mod digifinex;
 pub mod gate;
 pub mod lighter;
 pub mod mexc;
 pub mod okx;
+pub mod weex;
 
 // Backwards compatibility: Re-export for code using old flat structure
 #[cfg(feature = "binance_book")]
@@ -54,3 +58,5 @@ pub use gate::signing as gate_sign;
 pub use lighter::orderbook as lighter_book;
 pub use mexc::orderbook as mexc_book;
 pub use okx::orderbook as okx_book;
+pub use digifinex::orderbook as digifinex_book;
+pub use weex::orderbook as weex_book;

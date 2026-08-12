@@ -246,6 +246,8 @@ struct QuoteCsvLogger {
     last_okx: (u64, u64, u64),
     last_mexc: (u64, u64, u64),
     last_lighter: (u64, u64, u64),
+    last_digifinex: (u64, u64, u64),
+    last_weex: (u64, u64, u64),
     orders: HashMap<String, QuoteSnapshot>,
     pending_cancels: HashMap<String, CancelSnapshot>,
 }
@@ -258,6 +260,8 @@ enum ExchangeId {
     Okx,
     Mexc,
     Lighter,
+    Digifinex,
+    Weex,
 }
 
 const EMPTY_LEVELS: [Option<(f64, f64)>; SNAPSHOT_DEPTH] = [None; SNAPSHOT_DEPTH];
@@ -289,6 +293,8 @@ impl QuoteCsvLogger {
             last_okx: (0, 0, 0),
             last_mexc: (0, 0, 0),
             last_lighter: (0, 0, 0),
+            last_digifinex: (0, 0, 0),
+            last_weex: (0, 0, 0),
             orders: HashMap::new(),
             pending_cancels: HashMap::new(),
         })
@@ -326,6 +332,18 @@ impl QuoteCsvLogger {
             &st.lighter,
             Some(&st.demean.lighter),
         )?;
+        self.write_exchange(
+            ExchangeId::Digifinex,
+            "digifinex",
+            &st.digifinex,
+            Some(&st.demean.digifinex),
+        )?;
+        self.write_exchange(
+            ExchangeId::Weex,
+            "weex",
+            &st.weex,
+            Some(&st.demean.weex),
+        )?;
         Ok(())
     }
 
@@ -344,6 +362,8 @@ impl QuoteCsvLogger {
             ExchangeId::Okx => &mut self.last_okx,
             ExchangeId::Mexc => &mut self.last_mexc,
             ExchangeId::Lighter => &mut self.last_lighter,
+            ExchangeId::Digifinex => &mut self.last_digifinex,
+            ExchangeId::Weex => &mut self.last_weex,
         };
         let (orderbook_seq, bbo_seq, trade_seq) = cache;
         Self::write_feed_entry(

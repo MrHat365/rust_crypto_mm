@@ -88,6 +88,8 @@ fn main() {
     let mut last_gate_user_trade = 0u64;
     let mut last_bitget = (0u64, 0u64, 0u64);
     let mut last_mexc = (0u64, 0u64, 0u64);
+    let mut last_digifinex = (0u64, 0u64, 0u64);
+    let mut last_weex = (0u64, 0u64, 0u64);
 
     loop {
         let mut st = state().lock().unwrap();
@@ -364,6 +366,110 @@ fn main() {
             }
         }
         last_mexc.2 = st.mexc.trade.seq;
+
+        // digifinex
+        if st.digifinex.orderbook.seq != last_digifinex.0 {
+            if let Some(p) = restore_price(st.digifinex.orderbook.price, &st.demean.digifinex) {
+                let ts = st.digifinex.orderbook.ts_ns.unwrap_or(0);
+                write_csv_row(
+                    &mut w,
+                    ts,
+                    "digifinex",
+                    "orderbook",
+                    p,
+                    st.digifinex.orderbook.direction,
+                    None,
+                    None,
+                    None,
+                );
+                last_digifinex.0 = st.digifinex.orderbook.seq;
+            }
+        }
+        if st.digifinex.bbo.seq != last_digifinex.1 {
+            if let Some(p) = restore_price(st.digifinex.bbo.price, &st.demean.digifinex) {
+                let ts = st.digifinex.bbo.ts_ns.unwrap_or(0);
+                write_csv_row(
+                    &mut w,
+                    ts,
+                    "digifinex",
+                    "bbo",
+                    p,
+                    st.digifinex.bbo.direction,
+                    None,
+                    None,
+                    None,
+                );
+                last_digifinex.1 = st.digifinex.bbo.seq;
+            }
+        }
+        while let Some(event) = st.digifinex.trade_events.pop_front() {
+            if let Some(price) = restore_price(Some(event.price), &st.demean.digifinex) {
+                write_csv_row(
+                    &mut w,
+                    event.ts_ns,
+                    "digifinex",
+                    "trade",
+                    price,
+                    event.direction,
+                    event.quantity,
+                    None,
+                    None,
+                );
+            }
+        }
+        last_digifinex.2 = st.digifinex.trade.seq;
+
+        // weex
+        if st.weex.orderbook.seq != last_weex.0 {
+            if let Some(p) = restore_price(st.weex.orderbook.price, &st.demean.weex) {
+                let ts = st.weex.orderbook.ts_ns.unwrap_or(0);
+                write_csv_row(
+                    &mut w,
+                    ts,
+                    "weex",
+                    "orderbook",
+                    p,
+                    st.weex.orderbook.direction,
+                    None,
+                    None,
+                    None,
+                );
+                last_weex.0 = st.weex.orderbook.seq;
+            }
+        }
+        if st.weex.bbo.seq != last_weex.1 {
+            if let Some(p) = restore_price(st.weex.bbo.price, &st.demean.weex) {
+                let ts = st.weex.bbo.ts_ns.unwrap_or(0);
+                write_csv_row(
+                    &mut w,
+                    ts,
+                    "weex",
+                    "bbo",
+                    p,
+                    st.weex.bbo.direction,
+                    None,
+                    None,
+                    None,
+                );
+                last_weex.1 = st.weex.bbo.seq;
+            }
+        }
+        while let Some(event) = st.weex.trade_events.pop_front() {
+            if let Some(price) = restore_price(Some(event.price), &st.demean.weex) {
+                write_csv_row(
+                    &mut w,
+                    event.ts_ns,
+                    "weex",
+                    "trade",
+                    price,
+                    event.direction,
+                    event.quantity,
+                    None,
+                    None,
+                );
+            }
+        }
+        last_weex.2 = st.weex.trade.seq;
         drop(st);
 
         let _ = w.flush();

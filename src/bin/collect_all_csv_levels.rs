@@ -91,6 +91,8 @@ fn main() {
     let mut last_gate = (0u64, 0u64, 0u64);
     let mut last_bitget = (0u64, 0u64, 0u64);
     let mut last_mexc = (0u64, 0u64, 0u64);
+    let mut last_digifinex = (0u64, 0u64, 0u64);
+    let mut last_weex = (0u64, 0u64, 0u64);
 
     loop {
         {
@@ -193,6 +195,46 @@ fn main() {
                 }
             }
             last_mexc.2 = st.mexc.trade.seq;
+
+            if st.digifinex.orderbook.seq != last_digifinex.0 && st.digifinex.orderbook.price.is_some() {
+                write_feed_line(&mut writer, "digifinex", "orderbook", &st.digifinex.orderbook).ok();
+                last_digifinex.0 = st.digifinex.orderbook.seq;
+            }
+            if st.digifinex.bbo.seq != last_digifinex.1 && st.digifinex.bbo.price.is_some() {
+                write_feed_line(&mut writer, "digifinex", "bbo", &st.digifinex.bbo).ok();
+                last_digifinex.1 = st.digifinex.bbo.seq;
+            }
+            while let Some(event) = st.digifinex.trade_events.pop_front() {
+                if let Some(price) = restore_price(Some(event.price), &st.demean.digifinex) {
+                    let mut snap = FeedSnap::default();
+                    snap.price = Some(price);
+                    snap.ts_ns = Some(event.ts_ns);
+                    snap.direction = event.direction;
+                    snap.size = event.quantity;
+                    write_feed_line(&mut writer, "digifinex", "trade", &snap).ok();
+                }
+            }
+            last_digifinex.2 = st.digifinex.trade.seq;
+
+            if st.weex.orderbook.seq != last_weex.0 && st.weex.orderbook.price.is_some() {
+                write_feed_line(&mut writer, "weex", "orderbook", &st.weex.orderbook).ok();
+                last_weex.0 = st.weex.orderbook.seq;
+            }
+            if st.weex.bbo.seq != last_weex.1 && st.weex.bbo.price.is_some() {
+                write_feed_line(&mut writer, "weex", "bbo", &st.weex.bbo).ok();
+                last_weex.1 = st.weex.bbo.seq;
+            }
+            while let Some(event) = st.weex.trade_events.pop_front() {
+                if let Some(price) = restore_price(Some(event.price), &st.demean.weex) {
+                    let mut snap = FeedSnap::default();
+                    snap.price = Some(price);
+                    snap.ts_ns = Some(event.ts_ns);
+                    snap.direction = event.direction;
+                    snap.size = event.quantity;
+                    write_feed_line(&mut writer, "weex", "trade", &snap).ok();
+                }
+            }
+            last_weex.2 = st.weex.trade.seq;
         }
 
         let _ = writer.flush();

@@ -14,6 +14,8 @@ feeds: # valid options per exchange: true (force on), false (force off), auto (o
   okx: auto
   mexc: false
   lighter: auto
+  digifinex: auto
+  weex: auto
 risk:
   max_order_notional: 400.0
   max_position_notional: 500.0

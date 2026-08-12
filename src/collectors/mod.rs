@@ -1,8 +1,10 @@
 pub mod binance;
 pub mod bitget;
 pub mod bybit;
+pub mod digifinex;
 pub mod gate;
 pub mod helpers;
 pub mod lighter;
 pub mod mexc;
 pub mod okx;
+pub mod weex;

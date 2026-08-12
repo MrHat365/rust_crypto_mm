@@ -81,6 +81,11 @@ pub trait ExchangeHandler: Send + Sync + 'static {
     fn label(&self) -> String {
         self.url().to_string()
     }
+
+    // Optional extra HTTP headers for the WS handshake (e.g. Weex User-Agent).
+    fn extra_headers(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
 }
 
 // Fixed-size linear-probing map for last seen sequence per stream key.
@@ -220,6 +225,10 @@ fn gate_ping_reply(text: &str) -> Option<String> {
     if text.contains("\"type\":\"ping\"") {
         return Some(r#"{"type":"pong"}"#.to_string());
     }
+    // WEEX public channel: {"event":"ping","time":"..."}
+    if text.contains("\"event\":\"ping\"") {
+        return Some(r#"{"method":"PONG","id":1}"#.to_string());
+    }
     None
 }
 
@@ -304,6 +313,8 @@ fn run_ws_tungstenite<E, const N: usize>(
     E: ExchangeHandler,
 {
     use std::time::{Duration, Instant};
+    use http::{HeaderName, HeaderValue};
+    use tungstenite::client::IntoClientRequest;
     use tungstenite::{Message, connect};
     let url = handler.url().to_string();
     let label = handler.label();
@@ -311,7 +322,45 @@ fn run_ws_tungstenite<E, const N: usize>(
     let max_backoff = Duration::from_millis(3_000);
     let mut backoff = initial_backoff;
     loop {
-        let (mut socket, _response) = match connect(url::Url::parse(&url).unwrap()) {
+        let parsed = match url::Url::parse(&url) {
+            Ok(parsed) => parsed,
+            Err(err) => {
+                eprintln!("WS[{label}] invalid url {url}: {err}");
+                std::thread::sleep(backoff);
+                backoff = std::cmp::min(backoff * 2, max_backoff);
+                continue;
+            }
+        };
+        let mut request = match parsed.into_client_request() {
+            Ok(request) => request,
+            Err(err) => {
+                eprintln!(
+                    "WS[{label}] request build error: {err}; reconnecting in {}ms",
+                    backoff.as_millis()
+                );
+                std::thread::sleep(backoff);
+                backoff = std::cmp::min(backoff * 2, max_backoff);
+                continue;
+            }
+        };
+        for (name, value) in handler.extra_headers() {
+            let header_name = match HeaderName::from_bytes(name.as_bytes()) {
+                Ok(header_name) => header_name,
+                Err(err) => {
+                    eprintln!("WS[{label}] invalid header name {name}: {err}");
+                    continue;
+                }
+            };
+            let header_value = match HeaderValue::from_str(&value) {
+                Ok(header_value) => header_value,
+                Err(err) => {
+                    eprintln!("WS[{label}] invalid header value for {name}: {err}");
+                    continue;
+                }
+            };
+            request.headers_mut().insert(header_name, header_value);
+        }
+        let (mut socket, _response) = match connect(request) {
             Ok(ok) => ok,
             Err(err) => {
                 eprintln!(
@@ -505,6 +554,22 @@ fn run_ws_tungstenite<E, const N: usize>(
                             }
                         }
                         Message::Binary(bin) => {
+                            if let Ok(text) = std::str::from_utf8(&bin) {
+                                if let Some(reply) = gate_ping_reply(text) {
+                                    if !send_tungstenite_message(
+                                        &mut socket,
+                                        Message::Text(reply),
+                                        &label,
+                                        "ping reply",
+                                    ) {
+                                        std::thread::sleep(backoff);
+                                        backoff = std::cmp::min(backoff * 2, max_backoff);
+                                        backoff += Duration::from_millis(25);
+                                        break;
+                                    }
+                                    continue;
+                                }
+                            }
                             if let Some((k, s)) = handler.sequence_key_binary(&bin) {
                                 if !seq_gate.accept(k, s) {
                                     continue;

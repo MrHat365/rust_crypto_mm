@@ -24,6 +24,14 @@ exchanges/
 ├── bitget/        # Bitget (market data only)
 │   ├── parser.rs
 │   └── orderbook.rs
+├── digifinex/     # Digifinex swap v2 (market data only)
+│   ├── parser.rs
+│   ├── orderbook.rs
+│   └── rest.rs
+├── weex/          # WEEX contract v3 (market data only)
+│   ├── parser.rs
+│   ├── orderbook.rs
+│   └── rest.rs
 └── endpoints.rs   # Shared endpoint constants
 ```
 

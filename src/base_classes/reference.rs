@@ -27,6 +27,10 @@ pub enum ReferenceSource {
     MexcTrade = 12,
     LighterBbo = 13,
     LighterTrade = 14,
+    DigifinexBbo = 15,
+    DigifinexTrade = 16,
+    WeexBbo = 17,
+    WeexTrade = 18,
 }
 
 impl ReferenceSource {
@@ -51,6 +55,10 @@ impl ReferenceSource {
             ReferenceSource::MexcTrade => "mexc_trade",
             ReferenceSource::LighterBbo => "lighter_bbo",
             ReferenceSource::LighterTrade => "lighter_trade",
+            ReferenceSource::DigifinexBbo => "digifinex_bbo",
+            ReferenceSource::DigifinexTrade => "digifinex_trade",
+            ReferenceSource::WeexBbo => "weex_bbo",
+            ReferenceSource::WeexTrade => "weex_trade",
         }
     }
 }

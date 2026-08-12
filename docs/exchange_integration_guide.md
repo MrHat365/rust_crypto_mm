@@ -125,6 +125,8 @@ Create a small bin (see `src/bin/okx_orderbook_debug.rs:1` for reference):
 
 Once the above passes, the exchange is live in the hot path and ready for production strategy work.
 
+Current market-data venues beyond Gate/Lighter execution: Bybit, Binance, Bitget, OKX, MEXC, Digifinex swap v2, WEEX contract v3. Digifinex WS payloads are zlib-deflated; WEEX public WS requires a User-Agent header and Binance-style `@depth15/@trade/@ticker` streams.
+
 ---
 
 Happy integrating — with this structure, each new venue should be faster to add.
