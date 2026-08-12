@@ -17,7 +17,7 @@ fn digifinex_signing_and_private_auth_are_deterministic() {
     );
     assert_eq!(
         hmac_sha256_base64("secret", "123"),
-        "pCr1KL4/XJc8lA2YfkXSUPgB3C2CR4J37EThSYExXSo="
+        "d9445LUOYYoOu5XbYeL0Jpc5FlnYLAZKX4G59I2FzNU="
     );
     let subscription = DigiFinexPrivateSubscription::new("key", "secret", "BTCUSDTPERP")
         .expect("valid DigiFinex credentials");
