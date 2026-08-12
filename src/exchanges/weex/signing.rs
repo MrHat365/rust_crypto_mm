@@ -3,8 +3,10 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 pub fn sign_base64(secret: &str, message: &str) -> String {
-    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts arbitrary key sizes");
+    let mut mac = match Hmac::<Sha256>::new_from_slice(secret.as_bytes()) {
+        Ok(mac) => mac,
+        Err(err) => panic!("FATAL: HMAC-SHA256 rejected a WEEX key: {err}"),
+    };
     mac.update(message.as_bytes());
     base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes())
 }

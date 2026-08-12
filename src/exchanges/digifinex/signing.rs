@@ -12,8 +12,10 @@ pub fn hmac_sha256_base64(secret: &str, payload: &str) -> String {
 }
 
 fn hmac_sha256(secret: &str, payload: &str) -> Vec<u8> {
-    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts arbitrary key sizes");
+    let mut mac = match Hmac::<Sha256>::new_from_slice(secret.as_bytes()) {
+        Ok(mac) => mac,
+        Err(err) => panic!("FATAL: HMAC-SHA256 rejected a DigiFinex key: {err}"),
+    };
     mac.update(payload.as_bytes());
     mac.finalize().into_bytes().to_vec()
 }
