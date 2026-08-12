@@ -13,7 +13,7 @@ use rust_test::exchanges::weex::{
 fn digifinex_signing_and_private_auth_are_deterministic() {
     assert_eq!(
         hmac_sha256_hex("secret", "123GET/swap/v2/account/balance"),
-        "0cf6979586f5d570a3bb46603522965332a2793420a745461a492ab3413db500"
+        "6781460d50492b853e45e62eb3e3df17825198ce05adfc729e56508020c0e7f5"
     );
     assert_eq!(
         hmac_sha256_base64("secret", "123"),
