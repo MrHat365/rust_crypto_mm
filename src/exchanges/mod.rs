@@ -27,11 +27,13 @@
 pub mod binance;
 pub mod bitget;
 pub mod bybit;
+pub mod digifinex;
 pub mod endpoints;
 pub mod gate;
 pub mod lighter;
 pub mod mexc;
 pub mod okx;
+pub mod weex;
 
 // Backwards compatibility: Re-export for code using old flat structure
 #[cfg(feature = "binance_book")]
