@@ -8,6 +8,10 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, bail};
 use serde::Deserialize;
 
+use crate::exchanges::digifinex::{
+    DigiFinexOrderRequest, DigiFinexOrderType, DigiFinexPositionAction,
+};
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LeadLagConfig {
@@ -113,6 +117,76 @@ pub struct LeadLagDecision {
     pub expected_edge_bps: f64,
     pub beta: f64,
     pub calibration_samples: u64,
+}
+
+impl LeadLagDecision {
+    /// Convert a signal into position-aware DigiFinex IOC legs.
+    ///
+    /// A reversal is split into close then open. The caller must wait for the
+    /// private order update confirming the close before submitting the open leg.
+    pub fn digifinex_execution_plan(
+        &self,
+        instrument_id: &str,
+        current_position: f64,
+    ) -> Result<Vec<DigiFinexOrderRequest>> {
+        if instrument_id.trim().is_empty() {
+            bail!("DigiFinex execution instrument_id must be non-empty");
+        }
+        if !current_position.is_finite() {
+            bail!("DigiFinex execution current_position must be finite");
+        }
+        finite_gt("decision.quantity", self.quantity, 0.0)?;
+        finite_gt("decision.limit_price", self.limit_price, 0.0)?;
+
+        let mut legs = Vec::with_capacity(2);
+        let mut remaining = self.quantity;
+        match self.side {
+            LeadLagSide::Buy => {
+                if current_position < 0.0 {
+                    let close_size = remaining.min(-current_position);
+                    legs.push(order_leg(
+                        instrument_id,
+                        DigiFinexPositionAction::CloseShort,
+                        close_size,
+                        self.limit_price,
+                    ));
+                    remaining -= close_size;
+                }
+                if remaining > f64::EPSILON {
+                    legs.push(order_leg(
+                        instrument_id,
+                        DigiFinexPositionAction::OpenLong,
+                        remaining,
+                        self.limit_price,
+                    ));
+                }
+            }
+            LeadLagSide::Sell => {
+                if current_position > 0.0 {
+                    let close_size = remaining.min(current_position);
+                    legs.push(order_leg(
+                        instrument_id,
+                        DigiFinexPositionAction::CloseLong,
+                        close_size,
+                        self.limit_price,
+                    ));
+                    remaining -= close_size;
+                }
+                if remaining > f64::EPSILON {
+                    legs.push(order_leg(
+                        instrument_id,
+                        DigiFinexPositionAction::OpenShort,
+                        remaining,
+                        self.limit_price,
+                    ));
+                }
+            }
+        }
+        if legs.is_empty() {
+            bail!("DigiFinex execution plan unexpectedly contained no legs");
+        }
+        Ok(legs)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -353,6 +427,22 @@ fn ewma(previous: f64, sample: f64, alpha: f64) -> f64 {
     alpha * sample + (1.0 - alpha) * previous
 }
 
+fn order_leg(
+    instrument_id: &str,
+    action: DigiFinexPositionAction,
+    size: f64,
+    price: f64,
+) -> DigiFinexOrderRequest {
+    DigiFinexOrderRequest {
+        instrument_id: instrument_id.to_string(),
+        action,
+        order_type: DigiFinexOrderType::IocCustomPrice,
+        size,
+        price: Some(price.to_string()),
+        post_only: false,
+    }
+}
+
 fn finite_ge(name: &str, value: f64, minimum: f64) -> Result<()> {
     if !value.is_finite() || value < minimum {
         bail!("{name} must be finite and >= {minimum}, got {value}");
@@ -456,5 +546,29 @@ mod tests {
             .evaluate(now + Duration::from_millis(101))
             .expect_err("stale feed must error");
         assert!(err.to_string().contains("stale"));
+    }
+
+    #[test]
+    fn reversal_plan_closes_before_opening() {
+        let decision = LeadLagDecision {
+            side: LeadLagSide::Buy,
+            quantity: 2.0,
+            limit_price: 100.1,
+            expected_move_bps: 5.0,
+            expected_edge_bps: 3.0,
+            beta: 1.0,
+            calibration_samples: 10,
+        };
+        let legs = decision
+            .digifinex_execution_plan("BTCUSDTPERP", -0.5)
+            .expect("valid reversal");
+        assert_eq!(legs.len(), 2);
+        assert!(matches!(
+            legs[0].action,
+            DigiFinexPositionAction::CloseShort
+        ));
+        assert_eq!(legs[0].size, 0.5);
+        assert!(matches!(legs[1].action, DigiFinexPositionAction::OpenLong));
+        assert_eq!(legs[1].size, 1.5);
     }
 }

@@ -2,6 +2,7 @@
 
 use std::time::{Duration, Instant};
 
+use rust_test::exchanges::digifinex::DigiFinexPositionAction;
 use rust_test::strategy::{
     AdaptiveMarketMaker, AdaptiveMarketMakerConfig, BinanceDigiFinexLeadLag, LeadLagConfig,
     LeadLagSide, MarketSnapshot, VenueBbo,
@@ -79,6 +80,15 @@ fn lead_lag_emits_only_after_executable_costs() {
         .expect("edge clears costs");
     assert_eq!(decision.side, LeadLagSide::Buy);
     assert!(decision.expected_edge_bps >= 1.0);
+    let plan = decision
+        .digifinex_execution_plan("BTCUSDTPERP", -0.005)
+        .expect("position-aware execution plan");
+    assert_eq!(plan.len(), 2);
+    assert!(matches!(
+        plan[0].action,
+        DigiFinexPositionAction::CloseShort
+    ));
+    assert!(matches!(plan[1].action, DigiFinexPositionAction::OpenLong));
 }
 
 fn snapshot(bid_qty: f64, ask_qty: f64, buys: f64, sells: f64) -> MarketSnapshot {

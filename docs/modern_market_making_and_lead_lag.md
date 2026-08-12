@@ -128,6 +128,10 @@ edge =
 只有 `edge >= entry_threshold` 才生成意图。限价直接使用当时 DigiFinex ask/bid 作为
 marketable-limit 保护，不允许执行器无界追价。
 
+`LeadLagDecision::digifinex_execution_plan` 会根据私有仓位快照把意图转换成 DigiFinex
+IOC 委托。反向穿仓会拆成“先平旧方向、再开新方向”两腿；调用方必须等待私有
+`order.update` 确认第一腿完成后才能提交第二腿，不能仅凭 REST ACK 连续发送。
+
 硬门控：
 
 - Binance 和 DigiFinex 任一行情陈旧立即报错；
