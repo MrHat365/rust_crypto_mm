@@ -48,6 +48,11 @@ pub trait ExchangeHandler: Send + Sync + 'static {
     // Initial subscription messages to send after connect.
     fn initial_subscriptions(&self) -> &[String];
 
+    /// Extra HTTP upgrade headers required by the venue.
+    fn connect_headers(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
     // Parse inbound frames to output messages pushed to the ring buffer.
     fn parse_text(&self, text: &str, ts: Ts, recv_instant: Instant) -> Option<Self::Out>;
     fn parse_binary(&self, data: &[u8], ts: Ts, recv_instant: Instant) -> Option<Self::Out>;
@@ -63,6 +68,11 @@ pub trait ExchangeHandler: Send + Sync + 'static {
         None
     }
     fn build_app_heartbeat(&self) -> Option<HeartbeatPayload> {
+        None
+    }
+
+    /// Optional venue-specific reply for application-level control frames.
+    fn control_reply_text(&self, _text: &str) -> Option<String> {
         None
     }
 
@@ -304,6 +314,7 @@ fn run_ws_tungstenite<E, const N: usize>(
     E: ExchangeHandler,
 {
     use std::time::{Duration, Instant};
+    use tungstenite::client::IntoClientRequest;
     use tungstenite::{Message, connect};
     let url = handler.url().to_string();
     let label = handler.label();
@@ -311,7 +322,31 @@ fn run_ws_tungstenite<E, const N: usize>(
     let max_backoff = Duration::from_millis(3_000);
     let mut backoff = initial_backoff;
     loop {
-        let (mut socket, _response) = match connect(url::Url::parse(&url).unwrap()) {
+        let mut request = match url.as_str().into_client_request() {
+            Ok(request) => request,
+            Err(err) => {
+                eprintln!("FATAL: WS[{label}] invalid connection URL {url}: {err}");
+                return;
+            }
+        };
+        for (name, value) in handler.connect_headers() {
+            let name = match tungstenite::http::HeaderName::from_bytes(name.as_bytes()) {
+                Ok(name) => name,
+                Err(err) => {
+                    eprintln!("FATAL: WS[{label}] invalid header name {name:?}: {err}");
+                    return;
+                }
+            };
+            let value = match tungstenite::http::HeaderValue::from_str(&value) {
+                Ok(value) => value,
+                Err(err) => {
+                    eprintln!("FATAL: WS[{label}] invalid header value for {name}: {err}");
+                    return;
+                }
+            };
+            request.headers_mut().insert(name, value);
+        }
+        let (mut socket, _response) = match connect(request) {
             Ok(ok) => ok,
             Err(err) => {
                 eprintln!(
@@ -477,6 +512,20 @@ fn run_ws_tungstenite<E, const N: usize>(
                     let ts = now_ts_ns();
                     match msg {
                         Message::Text(txt) => {
+                            if let Some(reply) = handler.control_reply_text(&txt) {
+                                if !send_tungstenite_message(
+                                    &mut socket,
+                                    Message::Text(reply),
+                                    &label,
+                                    "venue control reply",
+                                ) {
+                                    std::thread::sleep(backoff);
+                                    backoff = std::cmp::min(backoff * 2, max_backoff);
+                                    backoff += Duration::from_millis(25);
+                                    break;
+                                }
+                                continue;
+                            }
                             if let Some(reply) = gate_ping_reply(&txt) {
                                 if !send_tungstenite_message(
                                     &mut socket,
@@ -590,7 +639,30 @@ fn run_ws_fast<E, const N: usize>(
             const SEQ_SLOTS: usize = 256;
             let mut seq_gate: SequenceGate<SEQ_SLOTS> = SequenceGate::new();
 
-            let req: Request<()> = url.clone().into_client_request().unwrap();
+            let mut req: Request<()> = match url.clone().into_client_request() {
+                Ok(request) => request,
+                Err(err) => {
+                    eprintln!("FATAL: WS[{label}] invalid connection URL {url}: {err}");
+                    return;
+                }
+            };
+            for (name, value) in handler.connect_headers() {
+                let name = match http::HeaderName::from_bytes(name.as_bytes()) {
+                    Ok(name) => name,
+                    Err(err) => {
+                        eprintln!("FATAL: WS[{label}] invalid header name {name:?}: {err}");
+                        return;
+                    }
+                };
+                let value = match http::HeaderValue::from_str(&value) {
+                    Ok(value) => value,
+                    Err(err) => {
+                        eprintln!("FATAL: WS[{label}] invalid header value for {name}: {err}");
+                        return;
+                    }
+                };
+                req.headers_mut().insert(name, value);
+            }
             let uri = req.uri().clone();
             let host = uri.host().unwrap().to_string();
             let port = uri.port_u16().unwrap_or(443);
@@ -707,6 +779,16 @@ fn run_ws_fast<E, const N: usize>(
                                 match frame.opcode {
                                     OpCode::Text => {
                                         if let Ok(s) = std::str::from_utf8(&frame.payload) {
+                                            if let Some(reply) = handler.control_reply_text(s) {
+                                                if let Err(err) = ws.write_text(reply).await {
+                                                    eprintln!("[{label}] venue control reply failed: {err}");
+                                                    tokio::time::sleep(backoff).await;
+                                                    backoff = std::cmp::min(backoff * 2, max_backoff);
+                                                    backoff += Duration::from_millis(25);
+                                                    break;
+                                                }
+                                                continue;
+                                            }
                                             if let Some(reply) = gate_ping_reply(s) {
                                                 if let Err(err) = ws.write_text(reply).await {
                                                     eprintln!("[{label}] ping reply failed: {err}");

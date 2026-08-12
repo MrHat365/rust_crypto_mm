@@ -55,7 +55,7 @@ impl WeexPrivateSubscription {
     pub fn subscribe_message(&self, id: u64) -> String {
         serde_json::json!({
             "method": "SUBSCRIBE",
-            "params": ["orders", "positions", "account"],
+            "params": ["account", "positions", "orders", "fill"],
             "id": id,
         })
         .to_string()
@@ -64,10 +64,25 @@ impl WeexPrivateSubscription {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WeexPrivateEvent {
-    Subscribed { id: Option<u64> },
-    Orders(serde_json::Value),
-    Positions(serde_json::Value),
-    Account(serde_json::Value),
+    Subscribed {
+        id: Option<u64>,
+    },
+    Orders {
+        version: u64,
+        data: serde_json::Value,
+    },
+    Positions {
+        version: u64,
+        data: serde_json::Value,
+    },
+    Account {
+        version: u64,
+        data: serde_json::Value,
+    },
+    Fills {
+        version: u64,
+        data: serde_json::Value,
+    },
 }
 
 pub fn parse_private_message(text: &str) -> Result<WeexPrivateEvent> {
@@ -89,10 +104,19 @@ pub fn parse_private_message(text: &str) -> Result<WeexPrivateEvent> {
         .get("e")
         .and_then(|value| value.as_str())
         .ok_or_else(|| anyhow::anyhow!("WEEX private websocket update missing event field 'e'"))?;
+    let version = value
+        .get("v")
+        .and_then(|value| value.as_u64())
+        .ok_or_else(|| anyhow::anyhow!("WEEX private websocket event={event} missing version v"))?;
+    let data = value
+        .get("d")
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("WEEX private websocket event={event} missing data d"))?;
     match event {
-        "orders" => Ok(WeexPrivateEvent::Orders(value)),
-        "positions" => Ok(WeexPrivateEvent::Positions(value)),
-        "account" => Ok(WeexPrivateEvent::Account(value)),
+        "orders" => Ok(WeexPrivateEvent::Orders { version, data }),
+        "positions" => Ok(WeexPrivateEvent::Positions { version, data }),
+        "account" => Ok(WeexPrivateEvent::Account { version, data }),
+        "fill" => Ok(WeexPrivateEvent::Fills { version, data }),
         _ => bail!("unexpected WEEX private websocket event '{event}'"),
     }
 }

@@ -81,6 +81,13 @@ impl ExchangeHandler for WeexHandler {
         &self.subscriptions
     }
 
+    fn connect_headers(&self) -> Vec<(String, String)> {
+        vec![(
+            "User-Agent".to_string(),
+            "rust-crypto-mm/weex-v3".to_string(),
+        )]
+    }
+
     fn parse_text(&self, text: &str, ts: Ts, recv_instant: Instant) -> Option<Self::Out> {
         parse_payload(text.as_bytes(), ts, recv_instant)
     }
@@ -97,6 +104,13 @@ impl ExchangeHandler for WeexHandler {
         let symbol = value.get("s").and_then(|value| value.as_str())?;
         let sequence = value.get("u").and_then(|value| value.as_u64())?;
         Some((fnv1a64(symbol.as_bytes()), sequence))
+    }
+
+    fn control_reply_text(&self, text: &str) -> Option<String> {
+        let value: serde_json::Value = serde_json::from_str(text).ok()?;
+        let is_ping = value.get("event").and_then(|value| value.as_str()) == Some("ping")
+            || value.get("type").and_then(|value| value.as_str()) == Some("ping");
+        is_ping.then(|| r#"{"method":"PONG","id":1}"#.to_string())
     }
 
     fn label(&self) -> String {
@@ -197,5 +211,26 @@ mod tests {
         };
         assert_eq!(depth.last_update_id, 161);
         assert_eq!(depth.bids[0].1, "2.10000");
+    }
+
+    #[test]
+    fn supplies_required_header_and_replies_to_both_ping_formats() {
+        let handler = WeexHandler::new("BTCUSDT");
+        assert_eq!(
+            handler.connect_headers(),
+            vec![(
+                "User-Agent".to_string(),
+                "rust-crypto-mm/weex-v3".to_string()
+            )]
+        );
+        let expected = Some(r#"{"method":"PONG","id":1}"#.to_string());
+        assert_eq!(
+            handler.control_reply_text(r#"{"event":"ping","time":"1693208170000"}"#),
+            expected
+        );
+        assert_eq!(
+            handler.control_reply_text(r#"{"type":"ping","time":"1693208170000"}"#),
+            expected
+        );
     }
 }

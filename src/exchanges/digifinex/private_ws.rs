@@ -86,32 +86,36 @@ pub enum DigiFinexPrivateEvent {
 pub struct AccountUpdate {
     pub currency: String,
     pub equity: String,
-    pub available: String,
+    pub avail_balance: String,
     pub margin: String,
+    pub frozen_margin: String,
+    pub realized_pnl: String,
+    pub unrealized_pnl: String,
+    pub time_stamp: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct PositionUpdate {
     pub instrument_id: String,
     pub side: String,
-    pub size: String,
+    pub position: String,
+    pub avail_position: String,
     pub leverage: String,
     pub margin_mode: String,
-    #[serde(default)]
-    pub average_open_price: Option<String>,
+    pub avg_cost: String,
+    pub timestamp: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct OrderUpdate {
     pub order_id: String,
     pub instrument_id: String,
-    pub order_status: i64,
-    #[serde(default)]
-    pub price: Option<String>,
-    #[serde(default)]
-    pub size: Option<String>,
-    #[serde(default)]
-    pub filled_size: Option<String>,
+    pub state: i64,
+    pub price: String,
+    pub size: String,
+    pub filled_qty: String,
+    pub price_avg: String,
+    pub time_stamp: u64,
 }
 
 pub fn parse_private_message(text: &str) -> anyhow::Result<DigiFinexPrivateEvent> {
