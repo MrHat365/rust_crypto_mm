@@ -136,12 +136,7 @@ fn parse_payload(data: &[u8], ts: Ts, recv_instant: Instant) -> Option<WeexFrame
         let event_name = match value.get("e").and_then(|value| value.as_str()) {
             Some(event_name) => event_name,
             None => {
-                log_parse_drop_bytes(
-                    "weex_ws",
-                    "missing_event",
-                    &"expected field 'e'",
-                    data,
-                );
+                log_parse_drop_bytes("weex_ws", "missing_event", &"expected field 'e'", data);
                 return None;
             }
         };

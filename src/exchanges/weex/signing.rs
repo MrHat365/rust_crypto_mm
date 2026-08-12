@@ -3,8 +3,8 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 pub fn sign_base64(secret: &str, message: &str) -> String {
-    let mut mac =
-        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC accepts arbitrary key sizes");
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
+        .expect("HMAC accepts arbitrary key sizes");
     mac.update(message.as_bytes());
     base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes())
 }

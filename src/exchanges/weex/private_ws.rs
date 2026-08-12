@@ -41,7 +41,10 @@ impl WeexPrivateSubscription {
             &format!("{timestamp}{WEEX_PRIVATE_WS_PATH}"),
         );
         let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static("rust-crypto-mm/weex-v3"));
+        headers.insert(
+            USER_AGENT,
+            HeaderValue::from_static("rust-crypto-mm/weex-v3"),
+        );
         insert_header(&mut headers, "access-key", &self.api_key)?;
         insert_header(&mut headers, "access-passphrase", &self.passphrase)?;
         insert_header(&mut headers, "access-timestamp", &timestamp)?;

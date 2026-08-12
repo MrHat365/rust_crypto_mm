@@ -138,10 +138,7 @@ impl DigiFinexClient {
             .await
     }
 
-    pub async fn place_order(
-        &self,
-        order: &DigiFinexOrderRequest,
-    ) -> Result<DigiFinexOrderAck> {
+    pub async fn place_order(&self, order: &DigiFinexOrderRequest) -> Result<DigiFinexOrderAck> {
         validate_order(order)?;
         let value = self
             .private_request(

@@ -127,10 +127,7 @@ impl WeexClient {
         self.request(
             Method::GET,
             "/capi/v3/market/depth",
-            &[
-                ("symbol", symbol.to_string()),
-                ("limit", limit.to_string()),
-            ],
+            &[("symbol", symbol.to_string()), ("limit", limit.to_string())],
             None,
             false,
         )
@@ -138,14 +135,8 @@ impl WeexClient {
     }
 
     pub async fn balances(&self) -> Result<Value> {
-        self.request(
-            Method::GET,
-            "/capi/v3/account/balance",
-            &[],
-            None,
-            true,
-        )
-        .await
+        self.request(Method::GET, "/capi/v3/account/balance", &[], None, true)
+            .await
     }
 
     pub async fn positions(&self, symbol: Option<&str>) -> Result<Value> {
@@ -196,7 +187,10 @@ impl WeexClient {
             )
             .await?;
         if value.get("success").and_then(Value::as_bool) != Some(true) {
-            bail!("WEEX cancel was not successful: {}", truncate(&value.to_string()));
+            bail!(
+                "WEEX cancel was not successful: {}",
+                truncate(&value.to_string())
+            );
         }
         Ok(())
     }
@@ -231,13 +225,8 @@ impl WeexClient {
         }
         if authenticated {
             let timestamp = now_ms()?.to_string();
-            let message = rest_message(
-                &timestamp,
-                method.as_str(),
-                path,
-                &query_string,
-                &body_text,
-            );
+            let message =
+                rest_message(&timestamp, method.as_str(), path, &query_string, &body_text);
             request = request
                 .header("ACCESS-KEY", &self.credentials.api_key)
                 .header(

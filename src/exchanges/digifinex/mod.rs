@@ -9,9 +9,9 @@ pub mod rest;
 #[cfg(feature = "gate_exec")]
 pub mod signing;
 
-pub use public_ws::{DigiFinexFrame, DigiFinexHandler, DigiFinexMarketEvent};
 #[cfg(feature = "gate_exec")]
 pub use private_ws::{DigiFinexPrivateEvent, DigiFinexPrivateSubscription};
+pub use public_ws::{DigiFinexFrame, DigiFinexHandler, DigiFinexMarketEvent};
 #[cfg(feature = "gate_exec")]
 pub use rest::{
     DigiFinexClient, DigiFinexCredentials, DigiFinexOrderRequest, DigiFinexOrderType,

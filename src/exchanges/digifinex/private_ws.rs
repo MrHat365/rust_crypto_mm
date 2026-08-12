@@ -183,10 +183,9 @@ mod tests {
 
     #[test]
     fn rejects_failed_auth() {
-        let err = parse_private_message(
-            r#"{"event":"server.auth","id":1,"code":3,"msg":"auth fail"}"#,
-        )
-        .expect_err("auth failure must be returned");
+        let err =
+            parse_private_message(r#"{"event":"server.auth","id":1,"code":3,"msg":"auth fail"}"#)
+                .expect_err("auth failure must be returned");
         assert!(err.to_string().contains("code=3"));
     }
 }

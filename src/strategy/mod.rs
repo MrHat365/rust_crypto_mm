@@ -7,9 +7,17 @@ use serde::Deserialize;
 use crate::base_classes::reference::ReferenceEvent;
 use crate::execution::{ClientOrderId, ExecutionReport};
 
+pub mod adaptive_market_maker;
+pub mod lead_lag;
 pub mod momentum_fade;
 pub mod simple_quote;
 
+pub use adaptive_market_maker::{
+    AdaptiveMarketMaker, AdaptiveMarketMakerConfig, AdaptiveQuote, MarketRegime, MarketSnapshot,
+};
+pub use lead_lag::{
+    BinanceDigiFinexLeadLag, LeadLagConfig, LeadLagDecision, LeadLagSide, VenueBbo,
+};
 pub use momentum_fade::{EntryPriceSource, MomentumFadeConfig, MomentumFadeStrategy};
 pub use simple_quote::{
     QuoteConfig, QuotePlan, QuoteStateMetrics, ReferenceMeta, SimpleQuoteStrategy, SizeSpec,

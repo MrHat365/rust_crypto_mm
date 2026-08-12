@@ -82,12 +82,8 @@ impl DigiFinexHandler {
             format!(
                 r#"{{"event":"depth.subscribe","id":1,"instrument_id":"{instrument_id}","level":20}}"#
             ),
-            format!(
-                r#"{{"event":"trades.subscribe","id":2,"instrument_id":"{instrument_id}"}}"#
-            ),
-            format!(
-                r#"{{"event":"ticker.subscribe","id":3,"instrument_id":"{instrument_id}"}}"#
-            ),
+            format!(r#"{{"event":"trades.subscribe","id":2,"instrument_id":"{instrument_id}"}}"#),
+            format!(r#"{{"event":"ticker.subscribe","id":3,"instrument_id":"{instrument_id}"}}"#),
         ];
         Self {
             instrument_id,
